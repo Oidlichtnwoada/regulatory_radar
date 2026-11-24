@@ -1,0 +1,231 @@
+@use "@angular/material" as mat;
+
+html {
+  color-scheme: light dark;
+  @include mat.theme(
+    (
+      color: mat.$azure-palette,
+      typography: (
+        plain-family: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
+        brand-family: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
+      ),
+      density: -1,
+    )
+  );
+}
+
+body {
+  margin: 0;
+  background: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-body-medium);
+}
+
+main {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+h2 {
+  font: var(--mat-sys-headline-small);
+  margin: 8px 0 12px;
+
+  @media (max-width: 720px) {
+    font: var(--mat-sys-title-large);
+  }
+}
+
+h3 {
+  font: var(--mat-sys-title-medium);
+  margin: 24px 0 8px;
+}
+
+a {
+  color: var(--mat-sys-primary);
+}
+
+.muted {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+
+  mat-form-field {
+    min-width: 240px;
+    flex: 1 1 240px;
+  }
+}
+
+table.full {
+  width: 100%;
+
+  th.mat-mdc-header-cell {
+    white-space: nowrap;
+  }
+
+  td.mat-mdc-cell {
+    vertical-align: top;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+
+  .nowrap {
+    white-space: nowrap;
+  }
+}
+
+/* Small secondary line inside a table cell or list item. */
+.meta {
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+/* Second line of a table cell; continues the first line in stacked rows. */
+.sub {
+  display: block;
+}
+
+/* Narrow screens: every row of a `stack` table becomes a compact card; cells wrap and carry their column label. */
+@media (max-width: 720px) {
+  table.stack {
+    display: block;
+
+    thead {
+      display: none;
+    }
+
+    tbody {
+      display: block;
+    }
+
+    tr.mat-mdc-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 16px;
+      height: auto;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--mat-sys-outline-variant);
+    }
+
+    td.mat-mdc-cell {
+      display: block;
+      padding: 0;
+      border: none;
+    }
+
+    td.wide {
+      flex-basis: 100%;
+    }
+
+    .sub {
+      display: inline;
+
+      &::before {
+        content: " · ";
+      }
+    }
+
+    td[data-label]::before {
+      content: attr(data-label) ": ";
+      color: var(--mat-sys-on-surface-variant);
+    }
+  }
+}
+
+pre.json {
+  overflow: auto;
+  max-height: 480px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--mat-sys-surface-container);
+  font-size: 12px;
+}
+
+dl.fields {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 16px;
+
+  dt {
+    font-weight: 600;
+  }
+
+  dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+
+  @media (max-width: 720px) {
+    grid-template-columns: 1fr;
+
+    dd {
+      margin-bottom: 8px;
+    }
+  }
+}
+
+/* Small key/value or code chips (source filters, NACE codes). */
+.tag {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 6px;
+  background: var(--mat-sys-surface-container-high);
+  font: var(--mat-sys-body-small);
+  overflow-wrap: anywhere;
+}
+
+/* Tones shared by every status chip (tiers, verdicts, source health). */
+.tone {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tone-urgent {
+  background: #b3261e;
+  color: #fff;
+}
+
+.tone-high {
+  background: #e8710a;
+  color: #fff;
+}
+
+.tone-medium {
+  background: #f9ab00;
+  color: #1f1f1f;
+}
+
+.tone-ok {
+  background: #188038;
+  color: #fff;
+}
+
+.tone-info {
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+}
+
+.tone-neutral {
+  background: var(--mat-sys-surface-container-highest);
+  color: var(--mat-sys-on-surface);
+}
+
+.spacer {
+  flex: 1;
+}

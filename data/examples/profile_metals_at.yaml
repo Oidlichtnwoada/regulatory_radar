@@ -1,0 +1,9 @@
+# synthetic / simplified, as of 2026-11, not an official AI:AT position
+profile_id: metals_at
+operator: "Sector desk for metal producers and metalworking (fictional)"
+country: AT
+nace_codes: [C24, C25]
+languages: [de, en]
+notes: >
+  Members smelt, roll and cast metals and make fabricated metal products.
+  Energy costs, emissions trading, trade defence and scrap flows matter most.

@@ -1,0 +1,146 @@
+{
+  "_note": "synthetic / simplified, as of 2026-11, not an official AI:AT position. Labels refer to procedure groups (see procedure_groups); an item that is a duplicate or a reaction counts as its group.",
+  "as_of": "2026-11-16",
+  "procedure_groups": {
+    "EU-EP-0001": [
+      "EU-EP-0001",
+      "EU-LEX-0002"
+    ],
+    "EU-LEX-0011": [
+      "EU-LEX-0011",
+      "EU-LEX-0015"
+    ],
+    "EU-HYS-0003": [
+      "EU-HYS-0003",
+      "EU-HYS-0013"
+    ],
+    "AT-PAR-0016": [
+      "AT-PAR-0016",
+      "AT-PAR-0018"
+    ],
+    "EU-LEX-0032": [
+      "EU-LEX-0032",
+      "EU-LEX-0033"
+    ],
+    "AT-PAR-0035": [
+      "AT-PAR-0035",
+      "AT-PAR-0036"
+    ],
+    "EU-EP-0039": [
+      "EU-EP-0039",
+      "EU-CON-0040"
+    ],
+    "ES-BOE-0044": [
+      "ES-BOE-0044",
+      "ES-BOE-0045"
+    ]
+  },
+  "profiles": {
+    "metals_at": {
+      "relevant": [
+        "EU-EP-0001",
+        "EU-HYS-0003",
+        "EU-LEX-0004",
+        "EU-CON-0007",
+        "EU-EP-0009",
+        "EU-LEX-0011",
+        "AT-PAR-0016",
+        "AT-PAR-0017",
+        "AT-GAZ-0020",
+        "EU-TRIS-0030",
+        "AT-PAR-0035",
+        "AT-GAZ-0037",
+        "EU-HYS-0038",
+        "EU-EP-0039"
+      ],
+      "borderline": [
+        "EU-EPRS-0010",
+        "EU-EP-0034"
+      ],
+      "not_relevant": [
+        "EU-HYS-0005",
+        "EU-EP-0006",
+        "EU-HYS-0008",
+        "EU-HYS-0012",
+        "EU-LEX-0014",
+        "AT-GAZ-0019",
+        "DE-GAZ-0021",
+        "ES-BOE-0022",
+        "ES-BOE-0023",
+        "ES-BOE-0024",
+        "EU-TRIS-0025",
+        "ES-BOE-0026",
+        "PL-SEJ-0027",
+        "EU-TRIS-0028",
+        "FR-JO-0029",
+        "EU-HYS-0031",
+        "EU-LEX-0032",
+        "PL-SEJ-0041",
+        "EU-TRIS-0042",
+        "EU-HYS-0043",
+        "ES-BOE-0044",
+        "EU-HYS-0046",
+        "ES-BOE-0047",
+        "AT-GAZ-0048",
+        "EU-EPRS-0049",
+        "ES-BOE-0050",
+        "FR-JO-0051",
+        "ES-BOE-0052",
+        "EU-EP-0053"
+      ]
+    },
+    "retail_es": {
+      "relevant": [
+        "EU-HYS-0005",
+        "EU-EP-0006",
+        "EU-EP-0009",
+        "EU-HYS-0012",
+        "EU-LEX-0014",
+        "ES-BOE-0022",
+        "ES-BOE-0023",
+        "EU-TRIS-0025",
+        "EU-LEX-0032",
+        "ES-BOE-0044",
+        "EU-HYS-0046",
+        "ES-BOE-0047",
+        "EU-EP-0053"
+      ],
+      "borderline": [
+        "EU-EPRS-0049",
+        "ES-BOE-0050"
+      ],
+      "not_relevant": [
+        "EU-EP-0001",
+        "EU-HYS-0003",
+        "EU-LEX-0004",
+        "EU-CON-0007",
+        "EU-HYS-0008",
+        "EU-EPRS-0010",
+        "EU-LEX-0011",
+        "AT-PAR-0016",
+        "AT-PAR-0017",
+        "AT-GAZ-0019",
+        "AT-GAZ-0020",
+        "DE-GAZ-0021",
+        "ES-BOE-0024",
+        "ES-BOE-0026",
+        "PL-SEJ-0027",
+        "EU-TRIS-0028",
+        "FR-JO-0029",
+        "EU-TRIS-0030",
+        "EU-HYS-0031",
+        "EU-EP-0034",
+        "AT-PAR-0035",
+        "AT-GAZ-0037",
+        "EU-HYS-0038",
+        "EU-EP-0039",
+        "PL-SEJ-0041",
+        "EU-TRIS-0042",
+        "EU-HYS-0043",
+        "AT-GAZ-0048",
+        "FR-JO-0051",
+        "ES-BOE-0052"
+      ]
+    }
+  }
+}

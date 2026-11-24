@@ -1,0 +1,268 @@
+// Regulatory Radar schema. PostgreSQL is the single source of state.
+// Design rule: append-only. Nothing is updated in place; a newer row supersedes an older one
+// (latest by created_at per key). "Current" read models are materialized views (see migrations).
+
+generator client {
+  provider               = "prisma-client"
+  output                 = "../src/generated/prisma"
+  moduleFormat           = "esm"
+  importFileExtension    = "js"
+  generatedFileExtension = "ts"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum SourceEventKind {
+  started
+  completed
+  degraded
+  failed
+}
+
+enum StageStatus {
+  identity
+  translated
+  embedded
+  skipped
+  failed
+}
+
+enum Verdict {
+  relevant
+  borderline
+  not_relevant
+}
+
+/// Append-only log of source fetch runs; the latest event per source is its status.
+model SourceEvent {
+  id         String          @id @default(uuid(7)) @db.Uuid
+  sourceId   String          @map("source_id")
+  kind       SourceEventKind
+  fetched    Int             @default(0)
+  inserted   Int             @default(0)
+  duplicates Int             @default(0)
+  durationMs Int?            @map("duration_ms")
+  message    String?
+  createdAt  DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([sourceId, createdAt(sort: Desc)])
+  @@map("source_event")
+}
+
+/// Append-only watermarks: streaming of a source is complete up to `watermark`.
+model SourceCheckpoint {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  sourceId  String   @map("source_id")
+  watermark DateTime @db.Timestamptz(3)
+  cursor    Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([sourceId, createdAt(sort: Desc)])
+  @@map("source_checkpoint")
+}
+
+/// Payload exactly as received. Deduplicated by the hash of its canonical JSON.
+model RawRecord {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  sourceId    String   @map("source_id")
+  externalId  String   @map("external_id")
+  contentHash String   @unique @map("content_hash")
+  payload     Json
+  fetchedAt   DateTime @default(now()) @map("fetched_at") @db.Timestamptz(3)
+  /// Global ingestion order (sources stream in their own order, the seed file in file order).
+  streamSeq   BigInt   @default(autoincrement()) @map("stream_seq")
+  finding     Finding?
+
+  @@index([sourceId, externalId])
+  @@index([sourceId, externalId, streamSeq])
+  @@map("raw_record")
+}
+
+/// One raw record in the common schema (deterministic normalisation, no ML).
+model Finding {
+  id             String        @id @default(uuid(7)) @db.Uuid
+  rawRecordId    String        @unique @map("raw_record_id") @db.Uuid
+  rawRecord      RawRecord     @relation(fields: [rawRecordId], references: [id])
+  sourceId       String        @map("source_id")
+  externalId     String        @map("external_id")
+  channel        String
+  level          String
+  jurisdiction   String
+  language       String
+  docType        String        @map("doc_type")
+  stage          String
+  title          String
+  summary        String?
+  publishedOn    DateTime      @map("published_on") @db.Date
+  deadline       DateTime?     @db.Date
+  deadlineKind   String?       @map("deadline_kind")
+  eventDate      DateTime?     @map("event_date") @db.Date
+  ref            String?
+  refKey         String?       @map("ref_key")
+  relatedTo      String?       @map("related_to")
+  naceTagsStated Boolean       @map("nace_tags_stated")
+  naceTags       String[]      @map("nace_tags")
+  topics         String[]
+  url            String?
+  actionPoints   Json          @map("action_points")
+  attributes     Json          @default("{}")
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  translations   Translation[]
+  embeddings     Embedding[]
+  groupLinks     GroupLink[]
+
+  @@index([sourceId, externalId, createdAt(sort: Desc)])
+  @@index([jurisdiction, publishedOn(sort: Desc)])
+  @@index([refKey])
+  @@index([createdAt(sort: Desc)])
+  @@map("finding")
+}
+
+/// English version of a finding's texts. Source texts stay on the finding.
+model Translation {
+  id             String      @id @default(uuid(7)) @db.Uuid
+  findingId      String      @map("finding_id") @db.Uuid
+  finding        Finding     @relation(fields: [findingId], references: [id])
+  engine         String
+  status         StageStatus
+  sourceLanguage String      @map("source_language")
+  titleEn        String?     @map("title_en")
+  summaryEn      String?     @map("summary_en")
+  error          String?
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([findingId, engine, createdAt(sort: Desc)])
+  @@map("translation")
+}
+
+/// Multilingual embedding of a finding's (translated) text; vector is NULL when skipped offline. Size depends on the
+/// provider (dims); compacted = the text exceeded the model's input limit and was compacted once before embedding.
+model Embedding {
+  id        String                 @id @default(uuid(7)) @db.Uuid
+  findingId String                 @map("finding_id") @db.Uuid
+  finding   Finding                @relation(fields: [findingId], references: [id])
+  engine    String
+  status    StageStatus
+  dims      Int?
+  vector    Unsupported("vector")?
+  compacted Boolean                @default(false)
+  error     String?
+  createdAt DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([findingId, engine, createdAt(sort: Desc)])
+  @@map("embedding")
+}
+
+/// A grouping decision of the agent (deterministic ref/related_to links are derived, not stored).
+model GroupLink {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  findingId      String   @map("finding_id") @db.Uuid
+  finding        Finding  @relation(fields: [findingId], references: [id])
+  engine         String
+  decision       String
+  targetGroupKey String?  @map("target_group_key")
+  rationale      String
+  trace          Json     @default("[]")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([findingId, engine, createdAt(sort: Desc)])
+  @@map("group_link")
+}
+
+/// Immutable snapshot of a procedure group; a new row is written whenever its content changes.
+model GroupSnapshot {
+  id              String           @id @default(uuid(7)) @db.Uuid
+  groupKey        String           @map("group_key")
+  contentHash     String           @map("content_hash")
+  retired         Boolean          @default(false)
+  engine          String
+  title           String
+  titleOriginal   String?          @map("title_original")
+  language        String
+  jurisdiction    String
+  level           String
+  stage           String
+  memberIds       String[]         @map("member_ids") @db.Uuid
+  naceTags        String[]         @map("nace_tags")
+  actionPoints    Json             @map("action_points")
+  sourceTrail     Json             @map("source_trail")
+  latestPublished DateTime         @map("latest_published") @db.Date
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  classifications Classification[]
+
+  @@index([groupKey, createdAt(sort: Desc)])
+  @@map("group_snapshot")
+}
+
+/// Relevance classification of one group snapshot by one engine.
+model Classification {
+  id          String           @id @default(uuid(7)) @db.Uuid
+  snapshotId  String           @map("snapshot_id") @db.Uuid
+  snapshot    GroupSnapshot    @relation(fields: [snapshotId], references: [id])
+  groupKey    String           @map("group_key")
+  engine      String
+  whyRelevant String           @map("why_relevant")
+  trace       Json             @default("[]")
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  labels      RelevanceLabel[]
+
+  @@index([groupKey, createdAt(sort: Desc)])
+  @@index([snapshotId, engine])
+  @@map("classification")
+}
+
+/// One (country x NACE) verdict of a classification. nace_path is an ltree (NACE.C.C24.C24_4; NACE = every sector).
+model RelevanceLabel {
+  id               String               @id @default(uuid(7)) @db.Uuid
+  classificationId String               @map("classification_id") @db.Uuid
+  classification   Classification       @relation(fields: [classificationId], references: [id])
+  country          String
+  naceCode         String               @map("nace_code")
+  nacePath         Unsupported("ltree") @map("nace_path")
+  verdict          Verdict
+  score            Float?
+  rationale        String
+
+  @@index([classificationId])
+  @@map("relevance_label")
+}
+
+/// Operator selection; every save is a new version, the latest is current.
+model OperatorProfile {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  countries      String[]
+  naceCodes      String[]  @map("nace_codes")
+  acknowledgedAt DateTime? @map("acknowledged_at") @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([createdAt(sort: Desc)])
+  @@map("operator_profile")
+}
+
+/// Append-only log of pipeline cycles (what ran, how many items each stage processed).
+model PipelineCycle {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  stats      Json
+  startedAt  DateTime @map("started_at") @db.Timestamptz(3)
+  finishedAt DateTime @default(now()) @map("finished_at") @db.Timestamptz(3)
+
+  @@index([finishedAt(sort: Desc)])
+  @@map("pipeline_cycle")
+}
+
+/// Embedding of a NACE Rev. 2.1 code (English title + explanatory notes); one row per engine, code and content hash.
+model NaceEmbedding {
+  id          String                @id @default(uuid(7)) @db.Uuid
+  code        String
+  engine      String
+  contentHash String                @map("content_hash")
+  dims        Int
+  vector      Unsupported("vector")
+  compacted   Boolean               @default(false)
+  createdAt   DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([engine, code, contentHash])
+  @@map("nace_embedding")
+}

@@ -1,0 +1,32 @@
+# Agent setup (AGENTS.md, .claude/commands, ...) is committed; local state is not.
+.claude/settings.local.json
+
+# Dependencies / build artefacts
+node_modules/
+dist/
+build/
+.angular/
+coverage/
+documentation/
+apps/*/documentation/
+e2e/test-results/
+e2e/playwright-report/
+apps/api/src/generated/prisma/
+
+# Postgres data directory of docker compose (the only state of the app)
+.pgdata/
+
+# Secrets / local environment
+.env
+.env.local
+
+# Python (Part B snippet)
+__pycache__/
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.idea/
+.pgdata-eval/
+# Partial output of a failed scripts/eval.sh run
+docs/eval/*.tmp

@@ -1,0 +1,37 @@
+{
+  "_note": "UI presets for the example operator profiles (data/examples/*.yaml), with their NACE Rev. 2 codes as written there. The API maps them to NACE Rev. 2.1 with the same function the pipeline uses for source tags (Eurostat's official correspondence NACE2_NACE2.1, data/nace_rev2_to_rev2_1.csv) and says where the mapping is not exact. See docs/nace-rev2-to-rev2.1.md.",
+  "presets": [
+    {
+      "id": "metals_at",
+      "label": "Metals · Austria",
+      "countries": [
+        "AT"
+      ],
+      "naceCodesRev2": [
+        "C24",
+        "C25"
+      ]
+    },
+    {
+      "id": "retail_es",
+      "label": "Retail · Spain",
+      "countries": [
+        "ES"
+      ],
+      "naceCodesRev2": [
+        "G47"
+      ]
+    },
+    {
+      "id": "agrifood_pl",
+      "label": "Agri-food · Poland",
+      "countries": [
+        "PL"
+      ],
+      "naceCodesRev2": [
+        "A01",
+        "C10"
+      ]
+    }
+  ]
+}

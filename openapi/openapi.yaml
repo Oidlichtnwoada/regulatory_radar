@@ -1,0 +1,704 @@
+openapi: 3.0.3
+info:
+  title: Regulatory Radar API
+  version: 1.0.0
+  description: |
+    Source of truth for the Regulatory Radar HTTP interface. The NestJS server types are generated
+    from this file (openapi-typescript) and so is the Angular client (openapi-generator, typescript-angular).
+
+    Pipeline: ingest (deterministic) -> translate to English (LLM) -> embed (LLM) -> group per procedure
+    (LangGraph agent, deterministic fallback) -> classify relevance per country x NACE Rev. 2.1 code
+    (LangGraph agent, deterministic fallback). Everything is stored in PostgreSQL.
+
+    No authentication and no TLS yet: run it on a trusted network only.
+  license:
+    name: Apache-2.0
+servers:
+  - url: /api/v1
+tags:
+  - name: system
+  - name: sources
+  - name: findings
+  - name: taxonomy
+  - name: profile
+  - name: radar
+  - name: digest
+paths:
+  /system/status:
+    get:
+      tags: [system]
+      operationId: getSystemStatus
+      summary: Runtime mode, configured providers and warnings (offline mode, missing API keys).
+      responses:
+        "200":
+          description: Current system status.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SystemStatus" }
+  /system/pipeline:
+    get:
+      tags: [system]
+      operationId: getPipelineStatus
+      summary: Progress counters for every pipeline stage.
+      responses:
+        "200":
+          description: Pipeline counters.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PipelineStatus" }
+  /sources:
+    get:
+      tags: [sources]
+      operationId: listSources
+      summary: Every configured source with its status (ok / degraded / failed), counts, last fetch and watermark.
+      responses:
+        "200":
+          description: Source statuses.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/SourceStatus" }
+  /findings:
+    get:
+      tags: [findings]
+      operationId: listFindings
+      summary: Imported items in the common schema (latest version per source item), newest first.
+      parameters:
+        - { $ref: "#/components/parameters/Countries" }
+        - name: sourceIds
+          in: query
+          description: Restrict to these source ids.
+          style: form
+          explode: false
+          schema: { type: array, items: { type: string } }
+        - name: q
+          in: query
+          description: Case-insensitive search in original and translated title.
+          schema: { type: string, maxLength: 200 }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: One page of findings.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FindingPage" }
+  /findings/{id}:
+    get:
+      tags: [findings]
+      operationId: getFinding
+      summary: One finding with its raw source payload, translation and embedding status.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: The finding.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FindingDetail" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /taxonomy/nace:
+    get:
+      tags: [taxonomy]
+      operationId: listNaceCodes
+      summary: The complete NACE Rev. 2.1 taxonomy (sections, divisions, groups, classes).
+      responses:
+        "200":
+          description: All NACE codes in hierarchical order.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/NaceCode" }
+  /taxonomy/countries:
+    get:
+      tags: [taxonomy]
+      operationId: listCountries
+      summary: The 27 EU member states (ISO 3166-1 alpha-2).
+      responses:
+        "200":
+          description: EU member states.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Country" }
+  /profile:
+    get:
+      tags: [profile]
+      operationId: getProfile
+      summary: The operator's current selection (latest saved version).
+      responses:
+        "200":
+          description: Current profile.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OperatorProfile" }
+    put:
+      tags: [profile]
+      operationId: saveProfile
+      summary: Save a new version of the operator's selection (append-only).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OperatorProfileInput" }
+      responses:
+        "200":
+          description: The saved profile.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OperatorProfile" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+  /profiles/presets:
+    get:
+      tags: [profile]
+      operationId: listProfilePresets
+      summary: Example operator profiles (data/examples) as selections in NACE Rev. 2.1.
+      description: |
+        The examples are written in NACE Rev. 2; each preset gives the Rev. 2.1 selection derived from Eurostat's
+        correspondence table NACE2_NACE2.1, the original Rev. 2 codes and a note where the mapping is not exact.
+      responses:
+        "200":
+          description: The presets.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ProfilePreset" }
+  /radar:
+    get:
+      tags: [radar]
+      operationId: getRadar
+      summary: Procedure groups relevant to the selection, ranked by actionability (deterministic).
+      description: |
+        Without `countries` / `naceCodes` the saved profile is used. Jurisdiction: EU-level groups plus
+        national groups of the selected countries. NACE matching is hierarchical: a label on `C24`
+        matches a selection of `C`, `C24` or `C24.4`; a horizontal label (`*`) matches every code.
+      parameters:
+        - { $ref: "#/components/parameters/Countries" }
+        - { $ref: "#/components/parameters/NaceCodes" }
+        - name: verdicts
+          in: query
+          description: Which verdicts to return. Default relevant and borderline.
+          style: form
+          explode: false
+          schema:
+            type: array
+            items: { $ref: "#/components/schemas/Verdict" }
+        - { $ref: "#/components/parameters/AsOf" }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Ranked radar entries plus the denominator.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RadarResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+  /procedure-groups/{groupKey}:
+    get:
+      tags: [radar]
+      operationId: getProcedureGroup
+      summary: One procedure group with all member findings, classification labels and grouping rationale.
+      parameters:
+        - name: groupKey
+          in: path
+          required: true
+          schema: { type: string }
+        - { $ref: "#/components/parameters/AsOf" }
+      responses:
+        "200":
+          description: The procedure group.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProcedureGroupDetail" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /digest/weekly:
+    get:
+      tags: [digest]
+      operationId: getWeeklyDigest
+      summary: E-mail-ready HTML digest of the ranked radar for one week.
+      parameters:
+        - { $ref: "#/components/parameters/Countries" }
+        - { $ref: "#/components/parameters/NaceCodes" }
+        - name: weekEnding
+          in: query
+          description: Last day of the digest week (ISO date). Default today.
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: HTML document.
+          content:
+            text/html:
+              schema: { type: string }
+        "400": { $ref: "#/components/responses/BadRequest" }
+components:
+  parameters:
+    Countries:
+      name: countries
+      in: query
+      description: ISO 3166-1 alpha-2 codes of EU member states.
+      style: form
+      explode: false
+      schema:
+        type: array
+        maxItems: 27
+        items: { type: string, pattern: "^[A-Z]{2}$" }
+    NaceCodes:
+      name: naceCodes
+      in: query
+      description: NACE Rev. 2.1 codes at any level (C, C24, C24.4, C24.42).
+      style: form
+      explode: false
+      schema:
+        type: array
+        maxItems: 100
+        items: { type: string, pattern: "^[A-V](\\d{2}(\\.\\d{1,2})?)?$" }
+    AsOf:
+      name: asOf
+      in: query
+      description: Reference date for "open" and "upcoming" (ISO date). Default today or RADAR_AS_OF.
+      schema: { type: string, format: date }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 500, default: 50 }
+    Offset:
+      name: offset
+      in: query
+      schema: { type: integer, minimum: 0, default: 0 }
+  responses:
+    NotFound:
+      description: Not found.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    BadRequest:
+      description: Invalid request.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+  schemas:
+    Problem:
+      type: object
+      description: RFC 9457 problem details.
+      required: [type, status, title]
+      properties:
+        type: { type: string, description: "Problem type URI (about:blank for plain HTTP errors)." }
+        status: { type: integer }
+        title: { type: string }
+        detail: { type: string }
+        instance: { type: string }
+    Level:
+      type: string
+      enum: [eu, national]
+    Stage:
+      type: string
+      description: Life-cycle stage of the item as reported by the channel.
+      enum: [information, proposal, consultation_open, standstill, in_procedure, adopted, unknown]
+    Verdict:
+      type: string
+      enum: [relevant, borderline, not_relevant]
+    ActionPointKind:
+      type: string
+      description: Kind of dated point that can require action.
+      enum:
+        [
+          consultation_deadline,
+          feedback_deadline,
+          amendment_deadline,
+          vote,
+          standstill_end,
+          adoption,
+          publication,
+        ]
+    ActionPoint:
+      type: object
+      required: [kind, date]
+      properties:
+        kind: { $ref: "#/components/schemas/ActionPointKind" }
+        date: { type: string, format: date }
+    ActionTier:
+      type: string
+      description: |
+        Actionability tier, most urgent first: open consultation or feedback window, upcoming vote or
+        amendment deadline, running standstill period, ongoing procedure, adopted act, information only.
+      enum: [open_window, upcoming_vote, standstill, in_procedure, adopted, information]
+    Actionability:
+      type: object
+      required: [tier, rank]
+      properties:
+        tier: { $ref: "#/components/schemas/ActionTier" }
+        rank: { type: integer, description: "1 = most urgent tier." }
+        date:
+          type: string
+          format: date
+          nullable: true
+          description: The date that drives the tier (next deadline, vote or standstill end).
+        kind:
+          allOf: [{ $ref: "#/components/schemas/ActionPointKind" }]
+          nullable: true
+    TranslationStatus:
+      type: string
+      enum: [identity, translated, skipped, failed, pending]
+    EmbeddingStatus:
+      type: string
+      enum: [embedded, skipped, failed, pending]
+    Finding:
+      type: object
+      description: One imported item in the common schema (one version of one source item).
+      required:
+        [
+          id,
+          sourceId,
+          externalId,
+          channel,
+          level,
+          jurisdiction,
+          language,
+          docType,
+          stage,
+          title,
+          publishedOn,
+          naceTagsStated,
+          naceTags,
+          topics,
+          actionPoints,
+          ingestedAt,
+          translation,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        sourceId: { type: string, description: "Configured source that delivered the item." }
+        externalId: { type: string, description: "Identifier of the item in its source." }
+        channel:
+          { type: string, description: "Channel inside the source (eu_eurlex, national_gazette, ...)." }
+        level: { $ref: "#/components/schemas/Level" }
+        jurisdiction:
+          { type: string, description: "EU or ISO country code of the rule-maker (not the channel)." }
+        language: { type: string, description: "ISO 639-1 language of title and summary." }
+        docType: { type: string }
+        stage: { $ref: "#/components/schemas/Stage" }
+        title: { type: string }
+        summary: { type: string, nullable: true }
+        publishedOn: { type: string, format: date }
+        deadline: { type: string, format: date, nullable: true }
+        deadlineKind: { type: string, nullable: true }
+        eventDate: { type: string, format: date, nullable: true }
+        ref:
+          {
+            type: string,
+            nullable: true,
+            description: "Procedure / document reference; shared refs mean the same procedure.",
+          }
+        relatedTo:
+          { type: string, nullable: true, description: "External id of the item this one reacts to." }
+        naceTagsStated: { type: boolean, description: "false = the channel gives no sector information." }
+        naceTags:
+          { type: array, items: { type: string }, description: "NACE Rev. 2.1 codes given by the channel." }
+        topics: { type: array, items: { type: string } }
+        url: { type: string, nullable: true }
+        actionPoints: { type: array, items: { $ref: "#/components/schemas/ActionPoint" } }
+        ingestedAt: { type: string, format: date-time }
+        groupKey: { type: string, nullable: true }
+        translation: { $ref: "#/components/schemas/TranslationInfo" }
+    TranslationInfo:
+      type: object
+      required: [status]
+      properties:
+        status: { $ref: "#/components/schemas/TranslationStatus" }
+        engine: { type: string, nullable: true }
+        titleEn: { type: string, nullable: true }
+        summaryEn: { type: string, nullable: true }
+    EmbeddingInfo:
+      type: object
+      required: [status]
+      properties:
+        status: { $ref: "#/components/schemas/EmbeddingStatus" }
+        engine: { type: string, nullable: true }
+        dimensions: { type: integer, nullable: true }
+    FindingDetail:
+      allOf:
+        - { $ref: "#/components/schemas/Finding" }
+        - type: object
+          required: [raw, embedding, attributes]
+          properties:
+            raw:
+              type: object
+              additionalProperties: true
+              description: The payload exactly as received from the source.
+            attributes:
+              type: object
+              additionalProperties: true
+              description: Source-specific extra fields kept by the normaliser.
+            embedding: { $ref: "#/components/schemas/EmbeddingInfo" }
+    FindingPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Finding" } }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+    SourceHealth:
+      type: string
+      enum: [ok, degraded, failed, running, idle, disabled]
+    SourceRunInfo:
+      type: object
+      required: [at, health, fetched, inserted, duplicates]
+      properties:
+        at: { type: string, format: date-time }
+        health: { $ref: "#/components/schemas/SourceHealth" }
+        fetched: { type: integer }
+        inserted: { type: integer }
+        duplicates: { type: integer }
+        durationMs: { type: integer, nullable: true }
+        message: { type: string, nullable: true }
+    SourceStatus:
+      type: object
+      required: [id, name, kind, level, enabled, requiresNetwork, health, recordCount, filters]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        kind: { type: string, enum: [file, eurlex_cellar, es_boe] }
+        level: { $ref: "#/components/schemas/Level" }
+        country: { type: string, nullable: true }
+        enabled: { type: boolean }
+        requiresNetwork: { type: boolean }
+        health: { $ref: "#/components/schemas/SourceHealth" }
+        recordCount: { type: integer, description: "Distinct raw records stored for this source." }
+        watermark:
+          {
+            type: string,
+            format: date,
+            nullable: true,
+            description: "Streaming is complete for items published before this day (ISO date, a calendar day: no time zone).",
+          }
+        lastRun: { allOf: [{ $ref: "#/components/schemas/SourceRunInfo" }], nullable: true }
+        lastSuccessAt: { type: string, format: date-time, nullable: true }
+        filters:
+          type: object
+          additionalProperties: true
+          description: Effective filters (time window, sections, document types).
+    ProviderInfo:
+      type: object
+      required: [provider, configured]
+      properties:
+        provider:
+          { type: string, description: "none, mistral or openai (one provider serves chat and embeddings)." }
+        model: { type: string, nullable: true }
+        configured: { type: boolean, description: "true when the provider has an API key." }
+    SystemStatus:
+      type: object
+      required: [mode, llm, embeddings, agentInternetAccess, warnings, asOf, naceRevision]
+      properties:
+        mode: { type: string, enum: [offline, online] }
+        llm: { $ref: "#/components/schemas/ProviderInfo" }
+        embeddings: { $ref: "#/components/schemas/ProviderInfo" }
+        agentInternetAccess: { type: boolean }
+        warnings: { type: array, items: { type: string } }
+        asOf: { type: string, format: date }
+        naceRevision: { type: string }
+    PipelineStatus:
+      type: object
+      required: [findings, translations, embeddings, naceEmbeddings, groups, classifiedGroups, engines]
+      properties:
+        findings: { type: integer }
+        translations: { $ref: "#/components/schemas/StageCounts" }
+        embeddings: { $ref: "#/components/schemas/StageCounts" }
+        naceEmbeddings:
+          type: object
+          description: NACE Rev. 2.1 codes embedded by the current embedding engine (title + explanatory notes); 0 of n offline.
+          required: [embedded, total]
+          properties:
+            embedded: { type: integer }
+            total: { type: integer }
+        groups: { type: integer }
+        classifiedGroups: { type: integer }
+        lastCycleAt: { type: string, format: date-time, nullable: true }
+        engines:
+          type: object
+          required: [translation, embedding, grouping, classification]
+          properties:
+            translation: { type: string }
+            embedding: { type: string }
+            grouping: { type: string }
+            classification: { type: string }
+    StageCounts:
+      type: object
+      required: [done, skipped, failed, pending]
+      properties:
+        done: { type: integer }
+        skipped: { type: integer }
+        failed: { type: integer }
+        pending: { type: integer }
+    NaceCode:
+      type: object
+      required: [code, level, title, depth]
+      properties:
+        code: { type: string }
+        level: { type: string, enum: [section, division, group, class] }
+        title: { type: string }
+        parent: { type: string, nullable: true }
+        depth: { type: integer, description: "0 = section, 3 = class." }
+    Country:
+      type: object
+      required: [code, name]
+      properties:
+        code: { type: string }
+        name: { type: string }
+    OperatorProfileInput:
+      type: object
+      required: [countries, naceCodes]
+      properties:
+        countries:
+          type: array
+          maxItems: 27
+          items: { type: string, pattern: "^[A-Z]{2}$" }
+        naceCodes:
+          type: array
+          maxItems: 100
+          items: { type: string, pattern: "^[A-V](\\d{2}(\\.\\d{1,2})?)?$" }
+        acknowledgedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Everything first seen before this instant is no longer marked as new.
+    ProfilePreset:
+      type: object
+      required: [id, label, countries, naceCodes, naceCodesRev2, exact, mappingNote]
+      properties:
+        id: { type: string, description: "Profile id of the example (e.g. metals_at)." }
+        label: { type: string }
+        countries:
+          type: array
+          items: { type: string, pattern: "^[A-Z]{2}$" }
+        naceCodes:
+          type: array
+          description: NACE Rev. 2.1 selection.
+          items: { type: string }
+        naceCodesRev2:
+          type: array
+          description: The example's original NACE Rev. 2 codes.
+          items: { type: string }
+        exact:
+          { type: boolean, description: "true when Rev. 2 and Rev. 2.1 cover exactly the same activities." }
+        mappingNote:
+          { type: string, description: "What differs between the Rev. 2 codes and the Rev. 2.1 selection." }
+    OperatorProfile:
+      allOf:
+        - { $ref: "#/components/schemas/OperatorProfileInput" }
+        - type: object
+          required: [savedAt]
+          properties:
+            savedAt: { type: string, format: date-time, nullable: true }
+    SourceTrailEntry:
+      type: object
+      required: [findingId, sourceId, channel, externalId, role, title, language, docType, stage, publishedOn]
+      properties:
+        findingId: { type: string, format: uuid }
+        sourceId: { type: string }
+        channel: { type: string }
+        externalId: { type: string }
+        role:
+          type: string
+          enum: [primary, later_step, language_version, duplicate, reaction, merged_by_agent]
+        title: { type: string }
+        titleEn: { type: string, nullable: true }
+        language: { type: string }
+        docType: { type: string }
+        stage: { $ref: "#/components/schemas/Stage" }
+        publishedOn: { type: string, format: date }
+        url: { type: string, nullable: true }
+    RelevanceLabel:
+      type: object
+      required: [country, naceCode, verdict, rationale]
+      properties:
+        country: { type: string }
+        naceCode: { type: string, description: "NACE Rev. 2.1 code or * for every sector." }
+        verdict: { $ref: "#/components/schemas/Verdict" }
+        score: { type: number, nullable: true }
+        rationale: { type: string }
+    RadarEntry:
+      type: object
+      required:
+        [
+          groupKey,
+          title,
+          language,
+          jurisdiction,
+          level,
+          stage,
+          actionability,
+          actionPoints,
+          verdict,
+          whyRelevant,
+          matchedLabels,
+          sourceTrail,
+          firstSeenAt,
+          isNew,
+          memberCount,
+          classificationEngine,
+        ]
+      properties:
+        groupKey:
+          {
+            type: string,
+            description: "Name of the procedure group: the id of its member that was streamed first (source:id if two sources share the id).",
+          }
+        title: { type: string, description: "English title when available, otherwise the original." }
+        titleOriginal: { type: string, nullable: true }
+        language: { type: string }
+        jurisdiction: { type: string }
+        level: { $ref: "#/components/schemas/Level" }
+        stage: { $ref: "#/components/schemas/Stage" }
+        actionability: { $ref: "#/components/schemas/Actionability" }
+        actionPoints: { type: array, items: { $ref: "#/components/schemas/ActionPoint" } }
+        verdict: { $ref: "#/components/schemas/Verdict" }
+        whyRelevant: { type: string }
+        matchedLabels: { type: array, items: { $ref: "#/components/schemas/RelevanceLabel" } }
+        sourceTrail: { type: array, items: { $ref: "#/components/schemas/SourceTrailEntry" } }
+        firstSeenAt: { type: string, format: date-time }
+        isNew: { type: boolean, description: "First seen after the profile's acknowledgedAt." }
+        memberCount: { type: integer }
+        classificationEngine: { type: string }
+    RadarResult:
+      type: object
+      required: [asOf, countries, naceCodes, verdicts, total, groupsChecked, findingsChecked, entries]
+      properties:
+        asOf: { type: string, format: date }
+        countries: { type: array, items: { type: string } }
+        naceCodes: { type: array, items: { type: string } }
+        verdicts: { type: array, items: { $ref: "#/components/schemas/Verdict" } }
+        total: { type: integer, description: "Matching procedure groups." }
+        groupsChecked:
+          {
+            type: integer,
+            description: "Denominator: procedure groups in jurisdiction scope that were checked.",
+          }
+        findingsChecked: { type: integer, description: "Denominator: findings behind the checked groups." }
+        entries: { type: array, items: { $ref: "#/components/schemas/RadarEntry" } }
+    GroupingDecision:
+      type: object
+      required: [findingId, engine, decision, rationale, createdAt]
+      properties:
+        findingId: { type: string, format: uuid }
+        engine: { type: string }
+        decision: { type: string, enum: [join, separate] }
+        targetGroupKey: { type: string, nullable: true }
+        rationale: { type: string }
+        createdAt: { type: string, format: date-time }
+    ProcedureGroupDetail:
+      allOf:
+        - { $ref: "#/components/schemas/RadarEntry" }
+        - type: object
+          required: [members, labels, groupingDecisions]
+          properties:
+            members: { type: array, items: { $ref: "#/components/schemas/Finding" } }
+            labels: { type: array, items: { $ref: "#/components/schemas/RelevanceLabel" } }
+            groupingDecisions: { type: array, items: { $ref: "#/components/schemas/GroupingDecision" } }

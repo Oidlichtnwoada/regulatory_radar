@@ -1,0 +1,100 @@
+# `docker compose up` brings up the whole radar. PostgreSQL is the only state (bind-mounted to
+# ${POSTGRES_DATA_DIR:-./.pgdata} on the host); every other service is stateless.
+name: regulatory-radar
+
+x-app: &app
+  build: { context: ., target: api }
+  image: regulatory-radar-api:local
+  env_file:
+    - path: .env
+      required: false
+  environment:
+    # The app appends _offline or _online to the database name: each mode keeps its own state.
+    DATABASE_URL: postgresql://radar:${POSTGRES_PASSWORD:-radar}@db:5432/radar
+    # Overridable from the shell (scripts/eval.sh); otherwise taken from .env.
+    LLM_PROVIDER: ${LLM_PROVIDER:-none}
+    SOURCE_FILE_ENABLED: ${SOURCE_FILE_ENABLED:-true}
+    SOURCE_FILE_PATH: ${SOURCE_FILE_PATH:-items.json}
+  restart: unless-stopped
+
+services:
+  db:
+    image: pgvector/pgvector:0.8.7-pg19-trixie
+    environment:
+      POSTGRES_USER: radar
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-radar}
+      POSTGRES_DB: radar
+    command:
+      - postgres
+      - -c
+      - log_min_duration_statement=250
+      - -c
+      - log_connections=on
+      - -c
+      - log_disconnections=on
+      - -c
+      - log_statement=ddl
+      - -c
+      - log_line_prefix=%m [%p] %u@%d %a
+    volumes:
+      - ${POSTGRES_DATA_DIR:-./.pgdata}:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U radar -d radar"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  migrate:
+    <<: *app
+    command: ["migrate"]
+    restart: "no"
+    depends_on:
+      db: { condition: service_healthy }
+
+  api:
+    <<: *app
+    command: ["api"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/v1/system/status').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  worker:
+    <<: *app
+    command: ["worker"]
+    volumes:
+      - ./data:/app/data:ro
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  # `docker compose run --rm eval`: waits until the pipeline has caught up, then scores the radar against
+  # data/eval/labels.json and labels.extended.json (recall/precision per profile). Not started by `up`.
+  eval:
+    <<: *app
+    # In the entrypoint, so `run --rm eval --labels file` appends options instead of replacing the command.
+    entrypoint: ["node", "dist/main.js", "eval"]
+    command: []
+    profiles: [eval]
+    restart: "no"
+    depends_on:
+      api: { condition: service_healthy }
+      worker: { condition: service_started }
+
+  web:
+    build: { context: ., target: web }
+    image: regulatory-radar-web:local
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      api: { condition: service_healthy }
+    restart: unless-stopped

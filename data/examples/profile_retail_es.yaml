@@ -1,0 +1,9 @@
+# synthetic / simplified, as of 2026-11, not an official AI:AT position
+profile_id: retail_es
+operator: "Retail trade association (fictional)"
+country: ES
+nace_codes: [G47]
+languages: [es, en]
+notes: >
+  Members run shops and online stores selling to consumers. Pricing rules,
+  opening hours, packaging take-back, product safety and consumer credit matter.

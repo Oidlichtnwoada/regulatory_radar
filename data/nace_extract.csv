@@ -1,0 +1,24 @@
+code,level,title_en
+A,section,"Agriculture, forestry and fishing"
+A01,division,"Crop and animal production, hunting and related service activities"
+C,section,Manufacturing
+C10,division,Manufacture of food products
+C20,division,Manufacture of chemicals and chemical products
+C24,division,Manufacture of basic metals
+C24.1,group,"Manufacture of basic iron and steel and of ferro-alloys"
+C24.4,group,Manufacture of basic precious and other non-ferrous metals
+C24.5,group,Casting of metals
+C25,division,"Manufacture of fabricated metal products, except machinery and equipment"
+D,section,"Electricity, gas, steam and air conditioning supply"
+D35,division,"Electricity, gas, steam and air conditioning supply"
+F,section,Construction
+F41,division,Construction of residential and non-residential buildings
+G,section,Wholesale and retail trade
+G46,division,Wholesale trade
+G47,division,Retail trade
+H,section,Transportation and storage
+H49,division,Land transport and transport via pipelines
+I,section,Accommodation and food service activities
+I56,division,Food and beverage service activities
+K,section,"Financial and insurance activities"
+K64,division,"Financial service activities, except insurance and pension funding"

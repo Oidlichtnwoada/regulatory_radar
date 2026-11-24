@@ -1,0 +1,8 @@
+# openapi-generator (typescript-angular) settings for the web client.
+ngVersion: "22.0.0"
+providedIn: root
+stringEnums: true
+enumPropertyNaming: original
+supportsES6: true
+withInterfaces: false
+fileNaming: kebab-case

@@ -1,0 +1,10 @@
+# synthetic / simplified, as of 2026-11, not an official AI:AT position
+# No labels for this profile in data/eval/labels.json (on purpose).
+profile_id: agrifood_pl
+operator: "Regional chamber, agri-food section (fictional)"
+country: PL
+nace_codes: [A01, C10]
+languages: [pl, en]
+notes: >
+  Farms and food processors. Storage, labelling, food safety and agricultural
+  support rules matter.

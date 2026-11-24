@@ -1,0 +1,256 @@
+{
+  "app": {
+    "name": "Regulatory Radar",
+    "api": "API",
+    "status": "{{mode}} · LLM {{provider}} · {{naceRevision}}",
+    "nav": "Main navigation",
+    "banner": {
+      "generic": "Limited mode: offline or no external API key configured. Translations and embeddings stay empty; grouping and relevance use deterministic best-effort rules."
+    }
+  },
+  "pages": {
+    "radar": "Radar",
+    "group": "Procedure group",
+    "findings": "Raw imports",
+    "finding": "Finding",
+    "sources": "Sources"
+  },
+  "shared": {
+    "source": "Source",
+    "jurisdiction": "Jurisdiction",
+    "language": "Language",
+    "published": "Published",
+    "deadline": "Deadline",
+    "naceTags": "NACE tags",
+    "findings": "Findings",
+    "whyRelevant": "Why relevant:",
+    "actionPoints": "Action points",
+    "sourceTrail": "Source trail",
+    "notAvailable": "n/a"
+  },
+  "labels": {
+    "tier": {
+      "open_window": "Open window",
+      "upcoming_vote": "Upcoming vote",
+      "standstill": "Standstill",
+      "in_procedure": "In procedure",
+      "adopted": "Adopted",
+      "information": "Information"
+    },
+    "verdict": {
+      "relevant": "Relevant",
+      "borderline": "Borderline",
+      "not_relevant": "Not relevant"
+    },
+    "health": {
+      "ok": "ok",
+      "degraded": "degraded",
+      "failed": "failed",
+      "running": "running",
+      "idle": "idle",
+      "disabled": "disabled"
+    },
+    "stage": {
+      "information": "Information",
+      "proposal": "Proposal",
+      "consultation_open": "Consultation open",
+      "standstill": "Standstill",
+      "in_procedure": "In procedure",
+      "adopted": "Adopted",
+      "unknown": "Unknown stage"
+    },
+    "actionPoint": {
+      "consultation_deadline": "Consultation deadline",
+      "feedback_deadline": "Feedback deadline",
+      "amendment_deadline": "Amendment deadline",
+      "vote": "Vote",
+      "standstill_end": "End of standstill",
+      "adoption": "Adoption",
+      "publication": "Publication"
+    },
+    "role": {
+      "primary": "Primary",
+      "later_step": "Later step",
+      "language_version": "Language version",
+      "duplicate": "Duplicate",
+      "reaction": "Reaction",
+      "merged_by_agent": "Merged by agent"
+    },
+    "sourceKind": {
+      "file": "Seed file",
+      "eurlex_cellar": "EUR-Lex CELLAR",
+      "es_boe": "BOE open data"
+    },
+    "level": {
+      "eu": "EU",
+      "national": "National"
+    },
+    "translation": {
+      "identity": "Already English",
+      "translated": "Translated",
+      "skipped": "Skipped",
+      "failed": "Failed",
+      "pending": "Pending"
+    },
+    "embedding": {
+      "embedded": "Embedded",
+      "skipped": "Skipped",
+      "failed": "Failed",
+      "pending": "Pending"
+    },
+    "decision": {
+      "join": "Join",
+      "separate": "Separate"
+    },
+    "docType": {
+      "act": "Act",
+      "agreement": "Agreement",
+      "council_position": "Council position",
+      "decision": "Decision",
+      "decree": "Decree",
+      "delegated_act": "Delegated act",
+      "feedback_statement": "Feedback statement",
+      "government_bill": "Government bill",
+      "implementing_act": "Implementing act",
+      "legislative_proposal": "Legislative proposal",
+      "ministerial_draft": "Ministerial draft",
+      "ministerial_order": "Ministerial order",
+      "notice": "Notice",
+      "plenary_vote": "Plenary vote",
+      "public_consultation": "Public consultation",
+      "regulation": "Regulation",
+      "resolution": "Resolution",
+      "royal_decree": "Royal decree",
+      "royal_decree_law": "Royal decree-law",
+      "study": "Study",
+      "technical_regulation_notification": "Technical regulation notification"
+    },
+    "mode": {
+      "offline": "Offline",
+      "online": "Online"
+    },
+    "deadlineKind": {
+      "consultation": "consultation",
+      "feedback": "feedback",
+      "amendments": "amendments",
+      "standstill_end": "end of standstill"
+    }
+  },
+  "radar": {
+    "countries": "Countries (EU member states)",
+    "verdicts": "Verdicts",
+    "markSeen": "Mark all as seen",
+    "digest": "Weekly digest",
+    "loadError": "Could not load the radar.",
+    "denominator": "hits out of {{groups}} procedure groups ({{findings}} findings) checked · as of {{asOf}} · {{countries}} × {{sectors}}",
+    "noCountry": "no country",
+    "noSector": "no sector",
+    "empty": "Nothing matches. Select at least one country and one sector.",
+    "nace": {
+      "label": "Sectors (NACE Rev. 2.1, any level)",
+      "selected": "Selected NACE codes",
+      "remove": "Remove {{code}}",
+      "placeholder": "Add a sector"
+    },
+    "entry": {
+      "new": "NEW",
+      "items": "{{count}} item(s)",
+      "labels": "Matched labels:",
+      "engine": "engine {{engine}}"
+    },
+    "presets": {
+      "label": "Example profiles",
+      "hint": "These examples were written in NACE Rev. 2 and mapped to Rev. 2.1; the mapping is not exact.",
+      "noteExact": "{{label}}: mapped from NACE Rev. 2 codes {{codes}}, identical in Rev. 2.1. {{note}}",
+      "noteInexact": "{{label}}: mapped from NACE Rev. 2 codes {{codes}}, not 100 % identical in Rev. 2.1. {{note}}"
+    }
+  },
+  "group": {
+    "firstSeen": "first seen {{date}}",
+    "none": "none",
+    "relevanceLabels": "Relevance labels ({{engine}})",
+    "country": "Country",
+    "nace": "NACE",
+    "verdict": "Verdict",
+    "rationale": "Rationale",
+    "groupingDecisions": "Grouping decisions",
+    "deterministicOnly": "Deterministic only (shared reference / reaction links).",
+    "notFound": "Procedure group not found.",
+    "decision": "{{engine}} · {{decision}} {{target}}"
+  },
+  "sourceTrail": {
+    "role": "Role",
+    "item": "Item",
+    "type": "Type / stage",
+    "language": "Lang",
+    "original": "Original",
+    "ref": "ref {{ref}}"
+  },
+  "findings": {
+    "search": "Search title",
+    "total": "{{count}} findings",
+    "columns": {
+      "title": "Title",
+      "origin": "Jur. / lang",
+      "type": "Type / stage",
+      "dates": "Published / deadline",
+      "translation": "Translation"
+    },
+    "ref": "ref {{ref}}",
+    "deadline": "due {{date}}"
+  },
+  "finding": {
+    "typeStage": "Type / stage",
+    "event": "Event",
+    "reference": "Reference",
+    "relatedTo": "(related to {{ref}})",
+    "notSectorSpecific": "not sector-specific",
+    "notGiven": "not given",
+    "topics": "Topics",
+    "summary": "Summary",
+    "titleEn": "English title",
+    "summaryEn": "English summary",
+    "embedding": "Embedding",
+    "group": "Group",
+    "link": "Link",
+    "attributes": "Source-specific attributes",
+    "raw": "Raw payload (as received)",
+    "notFound": "Finding not found.",
+    "embeddingInfo": "{{status}} · {{engine}} · {{dimensions}} dimensions"
+  },
+  "sources": {
+    "health": "Health",
+    "records": "Records",
+    "lastFetch": "Last fetch",
+    "lastRun": "fetched {{fetched}} · new {{inserted}} · dup {{duplicates}}",
+    "durationMs": "{{ms}} ms",
+    "never": "never",
+    "watermark": "Complete up to",
+    "filters": "Filters",
+    "network": "network",
+    "offline": "offline",
+    "pipeline": {
+      "title": "Pipeline",
+      "translation": "1 · Translation ({{engine}})",
+      "embedding": "2 · Embedding ({{engine}})",
+      "grouping": "3 · Grouping ({{engine}})",
+      "classification": "4 · Classification ({{engine}})",
+      "progress": "done {{done}} · skipped {{skipped}} · failed {{failed}} · pending {{pending}}",
+      "groups": "{{count}} procedure groups",
+      "classified": "{{count}} groups classified",
+      "lastCycle": "Last cycle",
+      "naceEmbedding": "2b · NACE taxonomy embeddings ({{engine}})",
+      "naceProgress": "{{embedded}} of {{total}} codes"
+    },
+    "notSet": "not set"
+  },
+  "paginator": {
+    "itemsPerPage": "Items per page:",
+    "nextPage": "Next page",
+    "previousPage": "Previous page",
+    "firstPage": "First page",
+    "lastPage": "Last page",
+    "range": "{{start}} – {{end}} of {{length}}",
+    "rangeEmpty": "0 of {{length}}"
+  }
+}

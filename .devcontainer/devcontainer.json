@@ -1,0 +1,11 @@
+{
+  "name": "regulatory-radar",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:4-26-trixie",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/java:1": { "version": "21" }
+  },
+  "forwardPorts": [8080, 3000, 4200],
+  "postCreateCommand": "npm install -g npm@12.2.3 && npm ci",
+  "remoteUser": "node"
+}

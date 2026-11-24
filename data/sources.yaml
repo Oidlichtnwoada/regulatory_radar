@@ -1,0 +1,168 @@
+# Public sources for a regulatory radar. All public, no paid services.
+# "checked" = HTTP status of the landing URL from a plain request on 2026-11-18
+# (not a test of the API itself). 403 usually means a bot/WAF filter, 000 = no
+# answer within 15 s from our network. Verify access, terms and rate limits
+# yourself and list what you use in THIRD_PARTY.md.
+#
+# The two top-level keys give the level: eu | national
+# stage:   what the channel tells you about a procedure's life cycle
+# access:  api | sparql | rss | html | portal | standard (given where we checked it; not every entry has one)
+
+eu:
+  - id: eu_eurlex_cellar
+    name: EUR-Lex via the Publications Office SPARQL endpoint (CELLAR)
+    url: https://publications.europa.eu/webapi/rdf/sparql
+    portal: https://eur-lex.europa.eu/
+    access: sparql
+    stage: proposals (CELEX sector 5), adopted acts incl. delegated/implementing acts (sector 3)
+    languages: all EU official languages
+    checked: 200
+  - id: eu_parliament_open_data
+    name: European Parliament Open Data Portal (API v2)
+    url: https://data.europarl.europa.eu/en/developer-corner/opendata-api
+    access: api
+    stage: plenary agendas incl. foreseen votes, procedures, committee documents
+    languages: all EU official languages
+    checked: "200 (portal); API base did not answer within 15 s on our check"
+  - id: eu_legislative_observatory
+    name: Legislative Observatory (OEIL)
+    url: https://oeil.secure.europarl.europa.eu/oeil/en
+    access: html
+    stage: procedure files with key events
+    checked: 200
+  - id: eu_have_your_say
+    name: European Commission "Have your say" (Better Regulation portal)
+    url: https://ec.europa.eu/info/law/better-regulation/have-your-say
+    access: portal (the web app is backed by a JSON API you may discover)
+    stage: calls for evidence, public consultations, draft delegated/implementing acts, all with feedback deadlines
+    checked: 200
+  - id: eu_council_press
+    name: Council of the EU and European Council press releases
+    url: https://www.consilium.europa.eu/en/press/press-releases/
+    access: rss / html
+    stage: general approaches, negotiating mandates, provisional agreements, conclusions
+    checked: "403 (bot filter on plain requests)"
+  - id: eu_tris
+    name: TRIS, Technical Regulation Information System
+    url: https://technical-regulation-information-system.ec.europa.eu/en/home
+    access: portal
+    stage: draft national technical rules notified by every member state, with standstill end date
+    note: an EU portal that carries NATIONAL drafts; jurisdiction is the notifying country
+    checked: "000 (no answer within 15 s on our check)"
+  - id: eu_eprs_think_tank
+    name: European Parliament Think Tank (EPRS briefings and studies)
+    url: https://www.europarl.europa.eu/thinktank/en/home
+    access: html / rss
+    stage: background analysis, not regulation itself
+    checked: "403 (bot filter on plain requests)"
+  - id: eu_nlex
+    name: N-Lex, gateway to national legislation databases
+    url: https://n-lex.europa.eu/
+    access: portal
+    stage: entry point to all national gazettes
+    checked: 200
+  - id: eu_eli
+    name: European Legislation Identifier (ELI)
+    url: https://eur-lex.europa.eu/eli-register/about.html
+    access: standard
+    stage: common identifiers, implemented by several national gazettes
+    checked: 202
+
+national:   # examples, not a complete list; any member state is fair game
+  AT:
+    - id: at_ris_ogd
+      name: Rechtsinformationssystem des Bundes (RIS), OGD API
+      url: https://data.bka.gv.at/ris/api/v2.6/
+      stage: adopted law (federal and state gazettes)
+      checked: 200
+    - id: at_parliament_open_data
+      name: Austrian Parliament open data (incl. ministerial drafts in consultation)
+      url: https://www.parlament.gv.at/recherchieren/open-data/
+      stage: ministerial drafts with consultation deadline, government bills, motions
+      checked: 200
+  DE:
+    - id: de_dip
+      name: DIP, documentation system for parliamentary proceedings (Bundestag/Bundesrat)
+      url: https://dip.bundestag.de/
+      stage: bills and proceedings (API requires a free key)
+      checked: 200
+    - id: de_recht_bund
+      name: Federal Law Gazette online
+      url: https://www.recht.bund.de/
+      stage: adopted law
+      checked: 200
+  ES:
+    - id: es_boe_open_data
+      name: Boletín Oficial del Estado, open data API
+      url: https://www.boe.es/datosabiertos/
+      stage: adopted law, daily summary
+      checked: 200
+  FR:
+    - id: fr_legifrance
+      name: Légifrance (API via the PISTE platform, free registration)
+      url: https://www.legifrance.gouv.fr/
+      stage: adopted law, Journal officiel
+      checked: "403 (bot filter on plain requests)"
+  IT:
+    - id: it_gazzetta
+      name: Gazzetta Ufficiale
+      url: https://www.gazzettaufficiale.it/
+      stage: adopted law
+      checked: 200
+    - id: it_normattiva
+      name: Normattiva
+      url: https://www.normattiva.it/
+      stage: consolidated law
+      checked: 200
+  NL:
+    - id: nl_internetconsultatie
+      name: Internetconsultatie (public consultations on draft rules)
+      url: https://www.internetconsultatie.nl/
+      stage: drafts with consultation deadline
+      checked: 200
+    - id: nl_officiele_bekendmakingen
+      name: Officiële bekendmakingen
+      url: https://www.officielebekendmakingen.nl/
+      stage: adopted law, parliamentary papers
+      checked: 200
+  PL:
+    - id: pl_sejm_api
+      name: Sejm API
+      url: https://api.sejm.gov.pl/
+      stage: bills, prints, proceedings; ISAP for adopted law
+      checked: 200
+    - id: pl_isap
+      name: ISAP, Internet System of Legal Acts
+      url: https://isap.sejm.gov.pl/
+      stage: adopted law
+      checked: "302 (redirect)"
+  CZ:
+    - id: cz_esbirka
+      name: e-Sbírka
+      url: https://www.e-sbirka.cz/
+      stage: adopted law
+      checked: 200
+  IE:
+    - id: ie_oireachtas_api
+      name: Houses of the Oireachtas Open Data API
+      url: https://api.oireachtas.ie/
+      stage: bills and debates
+      checked: 200
+    - id: ie_statute_book
+      name: Irish Statute Book
+      url: https://www.irishstatutebook.ie/
+      stage: adopted law
+      checked: 200
+  EE:
+    - id: ee_riigi_teataja
+      name: Riigi Teataja
+      url: https://www.riigiteataja.ee/
+      stage: adopted law
+      checked: 200
+
+taxonomy:
+  - id: nace
+    name: NACE, Statistical classification of economic activities (Eurostat)
+    url: https://ec.europa.eu/eurostat/web/nace
+    note: NACE Rev. 2.1 is used in EU statistics from 2025; Rev. 2 is still common in older data. Your call; document it.
+    checked: 200
