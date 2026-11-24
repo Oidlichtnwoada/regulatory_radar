@@ -76,6 +76,35 @@ const toFindings = (adapter: SourceAdapter, raws: readonly UnnormalisedRecord[])
   };
 };
 
+/** A raw record ready to insert. */
+interface RawDraft {
+  /** Source id. */
+  readonly sourceId: string;
+  /** Id of the item in the source. */
+  readonly externalId: string;
+  /** Hash of source, id and payload. */
+  readonly contentHash: string;
+  /** Payload as received. */
+  readonly payload: Prisma.InputJsonValue;
+}
+
+/**
+ * The records that are new versions: a record is kept when its hash differs from the latest stored (or earlier in
+ * this batch) version of the same item. Unlike a global hash check, an item that changes back to an earlier payload
+ * (A -> B -> A) becomes current again. Pure.
+ */
+export const newVersions = <T extends Pick<RawDraft, 'externalId' | 'contentHash'>>(
+  records: readonly T[],
+  latest: ReadonlyMap<string, string>,
+): readonly T[] =>
+  records.reduce<{ readonly kept: readonly T[]; readonly last: ReadonlyMap<string, string> }>(
+    (acc, r) =>
+      acc.last.get(r.externalId) === r.contentHash
+        ? acc
+        : { kept: [...acc.kept, r], last: new Map(acc.last).set(r.externalId, r.contentHash) },
+    { kept: [], last: latest },
+  ).kept;
+
 /**
  * Deterministic ingestion: streams every enabled source continuously (pass, pause, pass ...),
  * stores raw payloads deduplicated by content hash, normalises new ones into findings and checkpoints
@@ -99,10 +128,12 @@ export class IngestionService {
     await Promise.all(enabled.map((a) => this.loop(a, signal)));
   }
 
-  /** Repeats passes of one source with its poll pause. */
+  /** Repeats passes of one source with its poll pause; an unexpected error (e.g. the database is briefly down) is logged and the next pass retries, so one source never stops the worker. */
   private async loop(adapter: SourceAdapter, signal: AbortSignal): Promise<void> {
     while (!signal.aborted) {
-      await this.runPass(adapter, signal);
+      await this.runPass(adapter, signal).catch((e: unknown) =>
+        this.log.error(`${adapter.descriptor.id}: pass failed: ${errorMessage(e)}`),
+      );
       await sleep(adapter.descriptor.pollSeconds * 1000, signal);
     }
   }
@@ -136,7 +167,7 @@ export class IngestionService {
           await this.db.sourceCheckpoint.create({ data: { sourceId, watermark: batch.watermark } });
           watermark = batch.watermark;
         }
-        if (result.inserted > 0) await this.db.refreshReadModels();
+        if (result.inserted > 0) await this.db.refreshFindings();
       }
       const issues = [...totals.problems, ...totals.rejected.map((r) => `rejected ${r}`)];
       await this.event(
@@ -164,11 +195,9 @@ export class IngestionService {
     const pending = await unnormalisedRecords(this.db, adapter.descriptor.id);
     if (pending.length === 0) return [];
     const { rows, rejected } = toFindings(adapter, pending);
-    if (rows.length > 0) {
-      await this.db.finding.createMany({ data: [...rows], skipDuplicates: true });
-      await this.db.refreshReadModels();
-    }
-    return rejected;
+    const failed = await this.insertFindings(rows);
+    if (rows.length > failed.length) await this.db.refreshFindings();
+    return [...rejected, ...failed];
   }
 
   /** Appends a status event with the pass counters. */
@@ -196,30 +225,62 @@ export class IngestionService {
     });
   }
 
-  /** Latest stored watermark of a source. */
+  /**
+   * Inserts finding rows in one statement; if the database refuses it, row by row, so one bad row is reported as
+   * rejected (its raw record stays and is retried every pass) instead of blocking the source.
+   */
+  private async insertFindings(rows: readonly Prisma.FindingCreateManyInput[]): Promise<readonly string[]> {
+    if (rows.length === 0) return [];
+    const all = await this.db.finding.createMany({ data: [...rows], skipDuplicates: true }).then(
+      () => true,
+      () => false,
+    );
+    if (all) return [];
+    const results = await Promise.all(
+      rows.map((row) =>
+        this.db.finding.createMany({ data: [row], skipDuplicates: true }).then(
+          () => null,
+          (e: unknown) => `${row.externalId}: could not be stored: ${errorMessage(e).slice(0, 300)}`,
+        ),
+      ),
+    );
+    return results.filter((r): r is string => r !== null);
+  }
+
+  /** Highest stored watermark of a source (by value, so a slower concurrent pass can never move it back). */
   private async watermarkOf(sourceId: string): Promise<Date | null> {
     const cp = await this.db.sourceCheckpoint.findFirst({
       where: { sourceId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { watermark: 'desc' },
     });
     return cp?.watermark ?? null;
   }
 
-  /** Stores one batch: raw records (skip exact duplicates) and the findings of those that normalise, in one transaction. */
+  /**
+   * Stores one batch: the raw records that are new versions of their item (an advisory lock per source serialises
+   * concurrent passes, so the latest-version check cannot race), then the findings of those that normalise. A crash
+   * between the two leaves raw records without findings, which the next pass normalises.
+   */
   private async storeBatch(adapter: SourceAdapter, batch: SourceBatch): Promise<BatchResult> {
     const sourceId = adapter.descriptor.id;
-    const raws = batch.records.map((r) => ({
+    const raws: readonly RawDraft[] = batch.records.map((r) => ({
       sourceId,
       externalId: r.externalId,
       contentHash: hashOf({ sourceId, externalId: r.externalId, payload: r.payload }),
       payload: r.payload as Prisma.InputJsonValue,
     }));
     if (raws.length === 0) return { fetched: 0, inserted: 0, rejected: [] };
-    return this.db.$transaction(async (tx) => {
-      const created = await tx.rawRecord.createManyAndReturn({ data: raws, skipDuplicates: true });
-      const { rows, rejected } = toFindings(adapter, created);
-      if (rows.length > 0) await tx.finding.createMany({ data: [...rows] });
-      return { fetched: raws.length, inserted: created.length, rejected };
+    const created = await this.db.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`raw_record:${sourceId}`}))`;
+      const latest = await tx.$queryRaw<{ external_id: string; content_hash: string }[]>`
+        SELECT DISTINCT ON (external_id) external_id, content_hash FROM raw_record
+        WHERE source_id = ${sourceId} AND external_id = ANY(${[...new Set(raws.map((r) => r.externalId))]}::text[])
+        ORDER BY external_id, stream_seq DESC`;
+      const fresh = newVersions(raws, new Map(latest.map((l) => [l.external_id, l.content_hash])));
+      return fresh.length > 0 ? tx.rawRecord.createManyAndReturn({ data: [...fresh] }) : [];
     });
+    const { rows, rejected } = toFindings(adapter, created);
+    const failed = await this.insertFindings(rows);
+    return { fetched: raws.length, inserted: created.length, rejected: [...rejected, ...failed] };
   }
 }

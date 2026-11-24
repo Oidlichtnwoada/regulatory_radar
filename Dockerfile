@@ -23,7 +23,7 @@ COPY apps/web apps/web
 RUN npm run build -w apps/web
 
 FROM node AS api
-ENV NODE_ENV=production DATA_DIR=/app/data
+ENV NODE_ENV=production DATA_DIR=/app/data TZ=Etc/UTC
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/

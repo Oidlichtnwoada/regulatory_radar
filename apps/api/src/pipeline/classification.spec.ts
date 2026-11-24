@@ -1,8 +1,16 @@
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { type SectorLabel, safetyNet } from '../domain/classifier.js';
+import {
+  type CountryLabel,
+  classifyDeterministic,
+  keepTracked,
+  ruleMatches,
+  type SectorLabel,
+  safetyNet,
+} from '../domain/classifier.js';
+import type { GroupMember } from '../domain/grouping.js';
 import { loadTaxonomy, naceDocument, searchNaceText } from '../domain/nace.js';
-import { naceLabelProblems } from './classification.stage.js';
+import { classificationEngine, naceLabelProblems, validLabels } from './classification.stage.js';
 
 const tax = loadTaxonomy(join(import.meta.dirname, '../../../../data/nace_rev2_1.csv'));
 const label = (naceCode: string, verdict: SectorLabel['verdict']): SectorLabel => ({
@@ -55,5 +63,121 @@ describe('recall safety net', () => {
 
   it('adds nothing when the agent labelled every business', () => {
     expect(safetyNet([label('*', 'relevant')], [label('C10', 'relevant')])).toEqual([]);
+  });
+
+  it('is not switched off by a not_relevant label on every sector', () => {
+    expect(
+      safetyNet([label('*', 'not_relevant')], [label('C10', 'relevant')]).map((l) => l.naceCode),
+    ).toEqual(['C10']);
+  });
+});
+
+describe("validation of the agent's labels", () => {
+  const agent = (
+    naceCode: string,
+    naceTitle: string,
+    verdict: SectorLabel['verdict'],
+    countries: string[] | null,
+  ) => ({
+    naceCode,
+    naceTitle,
+    verdict,
+    countries,
+    rationale: `agent ${naceCode}`,
+  });
+
+  it('separates keyword traps, drops codes whose title still does not match, normalises countries', () => {
+    const { kept, rejected, dropped } = validLabels(tax, 'EU', [
+      agent('c24', 'Manufacture of basic metals', 'relevant', ['el', 'at', 'US']),
+      agent('G47', 'Retail trade', 'not_relevant', null),
+      agent('C33', 'Computer programming activities', 'relevant', null),
+      agent('K64', 'Financial services', 'relevant', null),
+    ]);
+    expect(kept).toEqual([
+      { naceCode: 'C24', verdict: 'relevant', score: null, rationale: 'agent c24', countries: ['GR', 'AT'] },
+    ]);
+    expect(rejected.map((l) => l.naceCode)).toEqual(['G47']);
+    expect(dropped).toHaveLength(2);
+  });
+
+  it('falls back to the whole scope when no given country is in it', () => {
+    const { kept } = validLabels(tax, 'AT', [
+      agent('C24', 'Manufacture of basic metals', 'relevant', ['DE']),
+    ]);
+    expect(kept[0]?.countries).toBeUndefined();
+  });
+});
+
+describe('stays tracked', () => {
+  const pair = (naceCode: string, verdict: CountryLabel['verdict']): CountryLabel => ({
+    country: 'AT',
+    naceCode,
+    verdict,
+    score: 2,
+    rationale: naceCode,
+  });
+
+  it('does not carry a pair the new classification rejects as a keyword trap', () => {
+    const previous = [pair('G47.1', 'borderline'), pair('C24', 'relevant')];
+    const next = keepTracked(previous, [], [pair('G47', 'not_relevant')]);
+    expect(next.map((l) => l.naceCode)).toEqual(['C24']);
+  });
+
+  it('never returns not_relevant labels', () => {
+    expect(
+      keepTracked([], [pair('G47', 'not_relevant'), pair('C24', 'relevant')]).map((l) => l.naceCode),
+    ).toEqual(['C24']);
+  });
+});
+
+describe('keyword rules', () => {
+  const member = (title: string, naceTags: string[] = []): GroupMember =>
+    ({
+      title,
+      titleEn: null,
+      summary: null,
+      summaryEn: null,
+      topics: [],
+      stage: 'proposal',
+      naceTags,
+    }) as unknown as GroupMember;
+  const codes = (title: string) =>
+    ruleMatches({ jurisdiction: 'EU', members: [member(title)] }).conceptLabels.map((l) => l.naceCode);
+
+  it.each([
+    ['Reglamento del transporte ferroviario de mercancías', 'C24.1'],
+    ['Ustawa o stałych kosztach', 'C24.1'],
+    ['Stale data in energy storage systems that are stored on site', 'G47'],
+    ['Precios de la farmacia y productos farmacéuticos', 'A01'],
+    ['Research and development tax credit for SMEs', 'L64'],
+  ])('"%s" does not suggest %s', (title, code) => {
+    expect(codes(title)).not.toContain(code);
+  });
+
+  it.each([
+    ['Ferroalloys: safeguard measures', 'C24.1'],
+    ['Wyroby ze stali i wyroby stalowe', 'C24.1'],
+    ['Farm to fork: support for farmers', 'A01'],
+    ['Consumer credit directive', 'L64'],
+  ])('"%s" still suggests %s', (title, code) => {
+    expect(codes(title)).toContain(code);
+  });
+
+  it('keeps the stated tag rationale when a keyword gives the same verdict', () => {
+    const { labels } = classifyDeterministic(tax, {
+      jurisdiction: 'AT',
+      members: [member('Steel and iron: stahl emissions rules', ['C24.1'])],
+    });
+    expect(labels.find((l) => l.naceCode === 'C24.1')?.rationale).toMatch(/^The channel tags/);
+  });
+});
+
+describe('classification engine id', () => {
+  it('carries the rules version, so a rule or prompt change re-classifies', () => {
+    expect(classificationEngine('deterministic')).toMatch(/^deterministic@[0-9a-f]{8}$/);
+    expect(classificationEngine('agent:openai:x')).toMatch(/^agent:openai:x@[0-9a-f]{8}$/);
+    expect(classificationEngine('agent:openai:x').split('@')[1]).not.toBe(
+      classificationEngine('deterministic').split('@')[1],
+    );
   });
 });

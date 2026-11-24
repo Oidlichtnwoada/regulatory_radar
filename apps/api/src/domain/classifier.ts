@@ -92,14 +92,25 @@ const strongestPerPair = (labels: readonly CountryLabel[]): readonly CountryLabe
 /**
  * "Stays tracked": a pair that was relevant or borderline before never drops below that verdict in a
  * later classification (a later step whose title no longer names the sector keeps its group tracked).
+ * A pair the new classification explicitly rejects (`rejected`: not_relevant on the code or an ancestor, e.g. a
+ * keyword trap the agent caught) is not carried. Only relevant and borderline labels are returned.
  */
 export const keepTracked = (
   previous: readonly CountryLabel[],
   next: readonly CountryLabel[],
+  rejected: readonly CountryLabel[] = [],
 ): readonly CountryLabel[] => {
   const nextByPair = new Map(next.map((l) => [`${l.country}|${l.naceCode}`, l]));
+  const isRejected = (p: CountryLabel) =>
+    rejected.some(
+      (r) =>
+        r.verdict === 'not_relevant' &&
+        r.country === p.country &&
+        r.naceCode !== HORIZONTAL &&
+        naceLineage(p.naceCode).includes(r.naceCode),
+    );
   const carried = previous
-    .filter((p) => p.verdict !== 'not_relevant')
+    .filter((p) => p.verdict !== 'not_relevant' && !isRejected(p))
     .filter(
       (p) =>
         verdictRank(nextByPair.get(`${p.country}|${p.naceCode}`)?.verdict ?? 'not_relevant') <
@@ -109,15 +120,18 @@ export const keepTracked = (
       ...p,
       rationale: `Kept tracked from an earlier step: ${p.rationale.replace(/^Kept tracked from an earlier step: /, '')}`,
     }));
-  return strongestPerPair([...next, ...carried]);
+  return strongestPerPair([...next, ...carried]).filter((l) => l.verdict !== 'not_relevant');
 };
+
+/** Highest score of the keyword rules (title weight 2 + 1 for several terms): stated tags get it, so they win ties. */
+const STATED_SCORE = 3;
 
 /** Labels for NACE codes the channel stated itself (facts, used by every engine). */
 export const statedLabels = (tax: NaceTaxonomy, members: readonly GroupMember[]): readonly SectorLabel[] =>
   [...new Set(members.flatMap((m) => m.naceTags))].sort().map((code) => ({
     naceCode: code,
     verdict: 'relevant',
-    score: 1,
+    score: STATED_SCORE,
     rationale: `The channel tags this procedure with NACE ${code} (${tax.byCode.get(code)?.title ?? 'unknown'}).`,
   }));
 
@@ -176,7 +190,8 @@ export const ruleMatches = (input: ClassifierInput) => {
 /**
  * Recall safety net for the agent: every sector the deterministic rules rate relevant or borderline that the
  * agent did not decide on (no label on the code, an ancestor, a descendant or '*') is added as borderline.
- * An explicit agent label, also not_relevant for a keyword trap, counts as a decision and is respected. Pure.
+ * An explicit agent label, also not_relevant for a keyword trap, counts as a decision and is respected; a '*' label
+ * covers every sector only when it is relevant or borderline (a '*' not_relevant does not switch the net off). Pure.
  */
 export const safetyNet = (
   agent: readonly SectorLabel[],
@@ -185,7 +200,7 @@ export const safetyNet = (
   const decided = (code: string) =>
     agent.some(
       (a) =>
-        a.naceCode === HORIZONTAL ||
+        (a.naceCode === HORIZONTAL && a.verdict !== 'not_relevant') ||
         naceLineage(code).includes(a.naceCode) ||
         naceLineage(a.naceCode).includes(code),
     );

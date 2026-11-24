@@ -28,6 +28,11 @@ export class PrismaService extends PrismaClient implements OnModuleDestroy {
     await this.$executeRawUnsafe('SELECT refresh_read_models()');
   }
 
+  /** Refreshes only the current-findings view (ingestion adds findings; groups and labels are the pipeline's). */
+  async refreshFindings(): Promise<void> {
+    await this.$executeRawUnsafe('SELECT refresh_findings()');
+  }
+
   /** Closes the pool on shutdown. */
   async onModuleDestroy(): Promise<void> {
     await this.$disconnect();

@@ -19,15 +19,18 @@ const encoder = ((): (() => Tiktoken) => {
   };
 })();
 
+/** Tokens of a text; special-token strings such as <|endoftext|> in source text are counted as plain text. */
+const encode = (text: string): number[] => encoder().encode(text, [], []);
+
 /**
  * Budget based on cl100k_base. `factor` 1 is exact for OpenAI's text-embedding-3 models; Mistral's tokenizer
  * is not available in JS, so its count is cl100k scaled up by a safety factor (never under-counts in practice).
  */
 export const tokenBudget = (maxInputTokens: number, factor = 1): TokenBudget => ({
   maxInputTokens,
-  count: (text) => Math.ceil(encoder().encode(text).length * factor),
+  count: (text) => Math.ceil(encode(text).length * factor),
   truncate: (text, maxTokens) => {
-    const tokens = encoder().encode(text);
+    const tokens = encode(text);
     const keep = Math.floor(maxTokens / factor);
     return tokens.length <= keep ? text : encoder().decode(tokens.slice(0, keep));
   },

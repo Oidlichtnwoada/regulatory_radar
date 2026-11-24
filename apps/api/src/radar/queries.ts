@@ -84,13 +84,14 @@ export const queryRadar = async (db: PrismaService, q: RadarQuery): Promise<Rada
   const countries = q.countries.length ? [...q.countries] : [...EU_COUNTRY_CODES];
   const lqueries = q.naceCodes.length ? [...naceSelectionQueries(q.naceCodes)] : ['NACE.*'];
   const ranks = q.verdicts.map((v) => VERDICT_BY_RANK.indexOf(v));
-  const keyFilter = q.groupKeys
-    ? Prisma.sql`AND g.group_key = ANY(${[...q.groupKeys]}::text[])`
-    : Prisma.empty;
+  // Asking for given groups (the detail page) finds them in any jurisdiction; the selection still decides the verdict.
+  const scopeFilter = q.groupKeys
+    ? Prisma.sql`g.group_key = ANY(${[...q.groupKeys]}::text[])`
+    : Prisma.sql`(g.level = 'eu' OR g.jurisdiction = ANY(${countries}::text[]))`;
   const rows = await db.$queryRaw<RadarRow[]>`
     WITH scope AS (
       SELECT g.* FROM radar_group_current g
-      WHERE (g.level = 'eu' OR g.jurisdiction = ANY(${countries}::text[])) ${keyFilter}
+      WHERE ${scopeFilter}
     ), hits AS (
       SELECT l.group_key, max(l.verdict_rank) AS verdict_rank,
              jsonb_agg(jsonb_build_object('country', l.country, 'naceCode', l.nace_code, 'verdict', l.verdict,
@@ -112,6 +113,11 @@ export const queryRadar = async (db: PrismaService, q: RadarQuery): Promise<Rada
     FROM ranked r
     ORDER BY r.rank, r.action_date NULLS LAST, r.verdict_rank DESC, r.latest_published DESC, r.group_key
     LIMIT ${q.limit} OFFSET ${q.offset}`;
+  // count(*) OVER () only exists on returned rows: past the last page, count with the first row instead.
+  if (rows.length === 0 && q.offset > 0) {
+    const head = await queryRadar(db, { ...q, limit: 1, offset: 0 });
+    return { ...head, entries: [] };
+  }
   const [first] = rows;
   const counts = first
     ? first
@@ -195,16 +201,17 @@ type FindingRow = {
   readonly total: bigint;
 };
 
-/** SQL selecting current findings with latest translation and current group key. */
-const findingsSql = (where: Prisma.Sql, page: Prisma.Sql) => Prisma.sql`
-  SELECT f.*, g.group_key, t.status::text AS t_status, t.engine AS t_engine, t.title_en, t.summary_en,
-         count(*) OVER () AS total
-  FROM finding_current fc JOIN finding f ON f.id = fc.id
+/**
+ * SQL adding the latest translation and the current group key to a set of finding ids (`picked`: columns id and
+ * total). The lookups run only for the picked rows, so a page costs the same however many findings exist.
+ */
+const findingDetailsSql = (picked: Prisma.Sql) => Prisma.sql`
+  SELECT f.*, g.group_key, t.status::text AS t_status, t.engine AS t_engine, t.title_en, t.summary_en, p.total
+  FROM (${picked}) p JOIN finding f ON f.id = p.id
   LEFT JOIN LATERAL (SELECT status, engine, title_en, summary_en FROM translation WHERE finding_id = f.id
                      ORDER BY (status IN ('identity', 'translated')) DESC, created_at DESC LIMIT 1) t ON true
   LEFT JOIN LATERAL (SELECT group_key FROM radar_group_current WHERE member_ids @> ARRAY[f.id] LIMIT 1) g ON true
-  ${where}
-  ORDER BY fc.published_on DESC, f.external_id, f.id ${page}`;
+  ORDER BY f.published_on DESC, f.external_id, f.id`;
 
 /** Maps a finding row onto the API finding. */
 export const toApiFinding = (r: FindingRow): ApiFinding => ({
@@ -253,13 +260,21 @@ export const queryFindings = async (
 ): Promise<{ items: readonly ApiFinding[]; total: number }> => {
   const pattern = q.q ? `%${q.q.replace(/[%_]/g, '')}%` : null;
   const rows = await db.$queryRaw<FindingRow[]>(
-    findingsSql(
-      Prisma.sql`WHERE (cardinality(${[...q.countries]}::text[]) = 0 OR fc.jurisdiction = ANY(${[...q.countries]}::text[]))
+    findingDetailsSql(Prisma.sql`
+      SELECT fc.id, count(*) OVER () AS total
+      FROM finding_current fc JOIN finding f ON f.id = fc.id
+      WHERE (cardinality(${[...q.countries]}::text[]) = 0 OR fc.jurisdiction = ANY(${[...q.countries]}::text[]))
         AND (cardinality(${[...q.sourceIds]}::text[]) = 0 OR fc.source_id = ANY(${[...q.sourceIds]}::text[]))
-        AND (${pattern}::text IS NULL OR f.title ILIKE ${pattern} OR t.title_en ILIKE ${pattern})`,
-      Prisma.sql`LIMIT ${q.limit} OFFSET ${q.offset}`,
-    ),
+        AND (${pattern}::text IS NULL OR f.title ILIKE ${pattern}
+             OR EXISTS (SELECT 1 FROM translation t WHERE t.finding_id = f.id AND t.title_en ILIKE ${pattern}))
+      ORDER BY fc.published_on DESC, f.external_id, f.id
+      LIMIT ${q.limit} OFFSET ${q.offset}`),
   );
+  // count(*) OVER () only exists on returned rows: past the last page, count with the first row instead.
+  if (rows.length === 0 && q.offset > 0) {
+    const head = await queryFindings(db, { ...q, limit: 1, offset: 0 });
+    return { items: [], total: head.total };
+  }
   return { items: rows.map(toApiFinding), total: Number(rows[0]?.total ?? 0) };
 };
 
@@ -272,6 +287,9 @@ export const findingsByIds = async (
     ? []
     : (
         await db.$queryRaw<FindingRow[]>(
-          findingsSql(Prisma.sql`WHERE f.id = ANY(${[...ids]}::uuid[])`, Prisma.empty),
+          // Any version: superseded findings that a group still lists are shown too.
+          findingDetailsSql(
+            Prisma.sql`SELECT id, 0::bigint AS total FROM finding WHERE id = ANY(${[...ids]}::uuid[])`,
+          ),
         )
       ).map(toApiFinding);

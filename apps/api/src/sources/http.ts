@@ -48,7 +48,12 @@ export const politeGet = async (url: string, opts: GetOptions): Promise<Response
       throw result instanceof HttpError
         ? result
         : new HttpError(result.status, `${url}: HTTP ${result.status}`);
-    await sleep(1000 * 2 ** n, opts.signal);
+    // Free the connection of the failed response and honour the server's Retry-After (seconds, capped at 60 s).
+    if (!(result instanceof HttpError)) await result.body?.cancel().catch(() => undefined);
+    const retryAfter = result instanceof HttpError ? Number.NaN : Number(result.headers.get('retry-after'));
+    const waitMs =
+      Number.isFinite(retryAfter) && retryAfter >= 0 ? Math.min(retryAfter, 60) * 1000 : 1000 * 2 ** n;
+    await sleep(waitMs, opts.signal);
     return attempt(n + 1);
   };
   return attempt(0);

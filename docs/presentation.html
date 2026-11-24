@@ -89,7 +89,7 @@
   <div class="grid">
     <div class="card"><h3>PostgreSQL 19</h3>Append-only tables, materialized read models, pgvector HNSW, ltree + GiST on (country, NACE path).</div>
     <div class="card"><h3>NestJS 12 + Prisma 7</h3>Worker and API from one image; every stage reads its pending work from Postgres.</div>
-    <div class="card"><h3>LangChain + LangGraph</h3>One provider for chat (tool calling) and multilingual embeddings: Mistral (EU) or OpenAI (US/global), behind LangChain interfaces; one shared ReAct graph for both agents.</div>
+    <div class="card"><h3>LangChain + LangGraph</h3>One provider for chat (tool calling) and multilingual embeddings: Mistral (global endpoint with web search, or EU region without it) or OpenAI (US/global), behind LangChain interfaces; one shared ReAct graph for both agents.</div>
     <div class="card"><h3>Angular 22</h3>Zoneless, signals only, Material, Transloco (en-US), client generated from <code>openapi.yaml</code>; profile presets; works on phones.</div>
     <div class="card"><h3>One contract</h3><code>openapi.yaml</code> drives server types, request validation (Ajv), the Angular client and the MCP tools with input and output schemas.</div>
   </div>
@@ -105,6 +105,7 @@
     <tr><td>Same procedure?</td><td>Shared ref or reaction (union-find, deterministic) plus agent joins with stored rationale. "When unsure: separate."</td></tr>
     <tr><td>Reproducible with an LLM?</td><td>Results stored with engine id and reused (temperature 0 where the model supports it); ranking is pure SQL.</td></tr>
     <tr><td>Data in NACE Rev. 2?</td><td>Mapped once where it enters, with Eurostat's correspondence; recall first, so a little broader than the original, and documented per profile.</td></tr>
+    <tr><td>EU-only inference?</td><td>Possible: Mistral's EU endpoint (<code>MISTRAL_SERVER_URL=https://api.eu.mistral.ai</code>). It has <b>no web search</b> (function calling only), so the global endpoint is the default; in the EU the agents only open known public pages with <code>fetch_url</code>.</td></tr>
     <tr><td>Where does operator data go?</td><td>Nowhere: classification is profile-independent, and the profile only filters indexed labels.</td></tr>
     <tr><td>Slow source?</td><td>Timeouts plus bounded back-off; a failed day keeps the watermark back and shows <code>degraded</code>.</td></tr>
   </table></div>

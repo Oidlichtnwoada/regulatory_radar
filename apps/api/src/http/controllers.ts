@@ -357,6 +357,7 @@ export class RadarController {
       entries: page.entries,
       newKeys,
       groupsChecked: page.groupsChecked,
+      total: page.total,
     });
   }
 }

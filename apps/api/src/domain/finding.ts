@@ -111,6 +111,18 @@ const isIsoDay = (s: unknown): boolean => {
   return day !== null && !Number.isNaN(day.getTime()) && isoDay(day) === s;
 };
 
+/** True for a non-empty string. */
+const isText = (v: unknown): v is string => typeof v === 'string' && v.trim() !== '';
+
+/** True for null or a string. */
+const isOptionalText = (v: unknown): boolean => v === null || typeof v === 'string';
+
+/** True for an array of strings. */
+const isTextList = (v: unknown): boolean => Array.isArray(v) && v.every((x) => typeof x === 'string');
+
+/** Postgres text and jsonb cannot hold the NUL character. */
+const hasNul = (v: unknown): boolean => JSON.stringify(v)?.includes('\\u0000') ?? false;
+
 /** Formats a value for an error message. */
 const shown = (v: unknown): string => JSON.stringify(v) ?? String(v);
 
@@ -124,7 +136,18 @@ export const validatedDraft = (d: FindingDraft): FindingDraft => {
   const errors = [
     !jurisdiction && `jurisdiction ${shown(d.jurisdiction)} is neither EU nor an EU member state`,
     !language && `language ${shown(d.language)} is not an official EU language (ISO 639-1)`,
-    !(typeof d.title === 'string' && d.title.trim()) && 'title is empty',
+    !isText(d.title) && 'title is empty',
+    !isText(d.channel) && `channel ${shown(d.channel)} is empty`,
+    !isText(d.docType) && `docType ${shown(d.docType)} is empty`,
+    !(STAGES as readonly string[]).concat('unknown').includes(d.stage) &&
+      `stage ${shown(d.stage)} is unknown`,
+    ...(['summary', 'deadlineKind', 'ref', 'relatedTo', 'url'] as const)
+      .filter((k) => !isOptionalText(d[k]))
+      .map((k) => `${k} ${shown(d[k])} is not text`),
+    !isTextList(d.naceTags) && `naceTags ${shown(d.naceTags)} is not a list of codes`,
+    !isTextList(d.topics) && `topics ${shown(d.topics)} is not a list of strings`,
+    typeof d.naceTagsStated !== 'boolean' && 'naceTagsStated is not a boolean',
+    hasNul(d) && 'text contains a NUL character, which the database cannot store',
     !isIsoDay(d.publishedOn) && `publishedOn ${shown(d.publishedOn)} is not an ISO date`,
     d.deadline !== null && !isIsoDay(d.deadline) && `deadline ${shown(d.deadline)} is not an ISO date`,
     d.eventDate !== null && !isIsoDay(d.eventDate) && `eventDate ${shown(d.eventDate)} is not an ISO date`,

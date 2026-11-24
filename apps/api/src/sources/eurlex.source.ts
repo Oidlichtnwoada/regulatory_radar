@@ -47,7 +47,7 @@ SELECT ?celex ?date ?title (GROUP_CONCAT(DISTINCT ?subject; separator="|") AS ?s
   ?expr cdm:expression_belongs_to_work ?work ; cdm:expression_title ?title ;
         cdm:expression_uses_language <http://publications.europa.eu/resource/authority/language/ENG> .
   OPTIONAL { ?work cdm:work_is_about_concept_eurovoc ?c . ?c skos:prefLabel ?subject . FILTER(lang(?subject) = "en") }
-} GROUP BY ?celex ?date ?title ORDER BY ?celex LIMIT ${limit} OFFSET ${offset}`;
+} GROUP BY ?celex ?date ?title ORDER BY ?celex ?title LIMIT ${limit} OFFSET ${offset}`;
 };
 
 /**
@@ -125,7 +125,8 @@ export const eurlexSource = (opts: EurlexOptions): SourceAdapter => ({
       stage: r.celex.startsWith('5') ? 'proposal' : 'adopted',
       title: r.title,
       summary: null,
-      publishedOn: r.date,
+      // xsd:date may carry a time zone suffix (2026-11-20Z); the calendar day is the first ten characters.
+      publishedOn: r.date.slice(0, 10),
       deadline: null,
       deadlineKind: null,
       eventDate: null,

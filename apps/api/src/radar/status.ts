@@ -4,16 +4,19 @@ import type { PrismaService } from '../db/prisma.service.js';
 import { NACE_REVISION, type NaceTaxonomy } from '../domain/nace.js';
 import type { components } from '../generated/openapi.js';
 import { type AiProviders, engines } from '../llm/providers.js';
+import { classificationEngine } from '../pipeline/classification.stage.js';
 import type { ConfiguredSource } from '../sources/registry.js';
 
 /** API schema types. */
 type S = components['schemas'];
 
-/** Reference date: RADAR_AS_OF or today. */
-export const asOfDate = (env: Env, override?: string | null): Date =>
-  override
-    ? new Date(`${override}T00:00:00Z`)
-    : (env.RADAR_AS_OF ?? new Date(new Date().toISOString().slice(0, 10)));
+/** Today's calendar day in UTC (the services run in Etc/UTC), as a UTC-midnight date like every stored day. */
+const today = (now: Date): Date =>
+  new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+
+/** Reference date: the override, RADAR_AS_OF or today (UTC). */
+export const asOfDate = (env: Env, override?: string | null, now: Date = new Date()): Date =>
+  override ? new Date(`${override}T00:00:00Z`) : (env.RADAR_AS_OF ?? today(now));
 
 /** System status: mode, providers and warnings. */
 export const systemStatus = (env: Env, ai: AiProviders): S['SystemStatus'] => {
@@ -109,7 +112,8 @@ export const pipelineStatus = async (
   ai: AiProviders,
   tax: NaceTaxonomy,
 ): Promise<S['PipelineStatus']> => {
-  const e = engines(ai);
+  // The classification engine id carries the rules/prompt version: groups count as classified for the current one.
+  const e = { ...engines(ai), classification: classificationEngine(engines(ai).classification) };
   type Row = {
     findings: bigint;
     groups: bigint;
@@ -130,7 +134,7 @@ export const pipelineStatus = async (
            (SELECT count(*) FROM m WHERE status = 'skipped') AS e_skipped,
            (SELECT count(*) FROM m WHERE status = 'failed') AS e_failed,
            (SELECT count(*) FROM radar_group_current) AS groups,
-           (SELECT count(*) FROM radar_group_current WHERE classification_id IS NOT NULL) AS classified,
+           (SELECT count(*) FROM radar_group_current WHERE classification_engine = ${e.classification}) AS classified,
            (SELECT count(DISTINCT code) FROM nace_embedding WHERE engine = ${e.embedding}) AS nace,
            (SELECT max(finished_at) FROM pipeline_cycle) AS last_cycle`;
   const n = (v: bigint | undefined) => Number(v ?? 0);

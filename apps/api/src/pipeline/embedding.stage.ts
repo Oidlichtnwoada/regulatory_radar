@@ -1,4 +1,5 @@
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { Logger } from '@nestjs/common';
 import { errorMessage, mapLimit } from '../common/fp.js';
 import type { PrismaService } from '../db/prisma.service.js';
 import type { GroupMember } from '../domain/grouping.js';
@@ -8,6 +9,9 @@ import { pendingFor } from './repository.js';
 /** Text that is embedded: English when available, otherwise the original (the model is multilingual). */
 export const embeddingText = (m: GroupMember): string =>
   [m.titleEn ?? m.title, m.summaryEn ?? m.summary, m.topics.join(', ')].filter(Boolean).join('\n');
+
+/** Logger of the stage (errors that only degrade a result, such as a failed compaction, are logged here). */
+const log = new Logger('Embedding');
 
 /** Instruction for the one-time compaction of an over-long text. */
 const COMPACT_SYSTEM = `You compact regulatory texts for a semantic search index. Keep the title, act numbers and
@@ -23,6 +27,8 @@ export interface EmbeddingInput {
   readonly text: string;
   /** True when the chat model compacted the text (it exceeded the input limit). */
   readonly compacted: boolean;
+  /** Why no input could be prepared (the item then fails without an embedding call). */
+  readonly error?: string;
 }
 
 /**
@@ -47,8 +53,12 @@ export const fitEmbeddingInput = async (
           ),
         ])
         .then(
-          (r) => (typeof r.content === 'string' ? r.content : JSON.stringify(r.content)),
-          () => '',
+          // The text parts only (reasoning models answer with content blocks).
+          (r) => r.text,
+          (e: unknown) => {
+            log.warn(`compaction failed, the text is cut instead: ${errorMessage(e)}`);
+            return '';
+          },
         )
     : '';
   const ok = compacted.trim() !== '';
@@ -58,9 +68,13 @@ export const fitEmbeddingInput = async (
 /** Result of embedding one text: a vector of the model's size, or why there is none. */
 export type Embedded = { readonly vector: readonly number[] } | { readonly error: string };
 
-/** Accepts a vector only if it has the model's size. */
+/** Accepts a vector only if it has the model's size and only finite numbers (pgvector rejects NaN/Infinity). */
 const sized = (v: readonly number[] | undefined, dims: number): Embedded =>
-  v?.length === dims ? { vector: v } : { error: `expected a ${dims}-dim vector, got ${v?.length ?? 'none'}` };
+  v?.length !== dims
+    ? { error: `expected a ${dims}-dim vector, got ${v?.length ?? 'none'}` }
+    : v.every(Number.isFinite)
+      ? { vector: v }
+      : { error: 'vector contains non-finite numbers' };
 
 /**
  * Embeds all texts in one request. If that request fails, each text is embedded on its own, so one bad
@@ -71,7 +85,10 @@ export const embedAll = async (
   texts: readonly string[],
   concurrency: number,
 ): Promise<readonly Embedded[]> => {
-  const batch = await provider.embeddings.embedDocuments([...texts]).catch(() => null);
+  const batch = await provider.embeddings.embedDocuments([...texts]).catch((e: unknown) => {
+    log.warn(`batch of ${texts.length} failed, embedding one by one: ${errorMessage(e)}`);
+    return null;
+  });
   if (batch?.length === texts.length) return texts.map((_, i) => sized(batch[i], provider.dimensions));
   return mapLimit(texts, concurrency, (t) =>
     provider.embeddings.embedDocuments([t]).then(
@@ -105,14 +122,27 @@ export const runEmbeddingStage = async (
     afterTranslation: opts.translationEngine,
   });
   if (pending.length === 0) return 0;
+  // A text that cannot even be measured fails its own row instead of the stage.
   const inputs = provider
-    ? await mapLimit(pending, opts.concurrency, (m) => fitEmbeddingInput(embeddingText(m), provider, chat))
-    : pending.map(() => ({ text: '', compacted: false }));
-  const results = provider
+    ? await mapLimit(pending, opts.concurrency, (m) =>
+        fitEmbeddingInput(embeddingText(m), provider, chat).catch(
+          (e: unknown): EmbeddingInput => ({ text: '', compacted: false, error: errorMessage(e) }),
+        ),
+      )
+    : pending.map((): EmbeddingInput => ({ text: '', compacted: false }));
+  const ready = inputs.flatMap((input, i) => (input.error === undefined ? [i] : []));
+  const embedded = provider
     ? await embedAll(
         provider,
-        inputs.map((i) => i.text),
+        ready.map((i) => inputs[i]?.text ?? ''),
         opts.concurrency,
+      )
+    : null;
+  const results: readonly Embedded[] | null = embedded
+    ? inputs.map((input, i) =>
+        input.error !== undefined
+          ? { error: input.error }
+          : (embedded[ready.indexOf(i)] ?? { error: 'no embedding returned' }),
       )
     : null;
   const rows = pending.map((m, i) => {

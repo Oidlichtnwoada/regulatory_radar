@@ -177,8 +177,25 @@ const vectorType = (dims: number): Prisma.Sql => {
 };
 
 /**
- * Nearest current findings by cosine distance of their latest embedding of `engine`. The query vector is
- * passed as a constant so the partial HNSW index of `dims` serves the ORDER BY.
+ * Runs a nearest-neighbour query with pgvector's iterative index scan: the HNSW index returns candidates until
+ * enough rows pass the filters (engine, current version, jurisdiction) instead of stopping after ef_search
+ * candidates. Results may come slightly out of order, so callers re-sort by distance.
+ */
+const withIterativeScan = <T>(db: PrismaService, query: Prisma.Sql): Promise<T[]> =>
+  db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT set_config('hnsw.iterative_scan', 'relaxed_order', true)`;
+    return tx.$queryRaw<T[]>(query);
+  });
+
+/** Filters of a nearest-neighbour search. */
+export interface NearestOptions {
+  /** Only findings of this jurisdiction (EU or a country code). */
+  readonly jurisdiction?: string;
+}
+
+/**
+ * Nearest current findings by cosine distance of their latest embedding of `engine`, optionally of one
+ * jurisdiction. The query vector is passed as a constant so the partial HNSW index of `dims` serves the ORDER BY.
  */
 export const nearestFindings = async (
   db: PrismaService,
@@ -186,6 +203,7 @@ export const nearestFindings = async (
   engine: string,
   dims: number,
   k: number,
+  opts: NearestOptions = {},
 ): Promise<readonly { readonly id: string; readonly distance: number }[]> => {
   const type = vectorType(dims);
   const [me] = await db.$queryRaw<{ v: string }[]>`
@@ -193,20 +211,57 @@ export const nearestFindings = async (
     WHERE finding_id = ${findingId}::uuid AND engine = ${engine} AND dims = ${dims}
     ORDER BY created_at DESC LIMIT 1`;
   if (!me) return [];
-  return db.$queryRaw`
-    SELECT e.finding_id AS id, ((e.vector::${type}) <=> ${me.v}::${type})::float AS distance
-    FROM embedding e JOIN finding_current fc ON fc.id = e.finding_id
-    WHERE e.dims = ${dims} AND e.engine = ${engine} AND e.finding_id <> ${findingId}::uuid
-    ORDER BY (e.vector::${type}) <=> ${me.v}::${type} LIMIT ${k}`;
+  const inJurisdiction = opts.jurisdiction
+    ? Prisma.sql`AND fc.jurisdiction = ${opts.jurisdiction}`
+    : Prisma.empty;
+  return withIterativeScan(
+    db,
+    Prisma.sql`
+      SELECT id, distance FROM (
+        SELECT e.finding_id AS id, ((e.vector::${type}) <=> ${me.v}::${type})::float AS distance
+        FROM embedding e JOIN finding_current fc ON fc.id = e.finding_id
+        WHERE e.dims = ${dims} AND e.engine = ${engine} AND e.finding_id <> ${findingId}::uuid ${inJurisdiction}
+        ORDER BY (e.vector::${type}) <=> ${me.v}::${type} LIMIT ${k}) n
+      ORDER BY distance, id`,
+  );
+};
+
+/**
+ * For many findings at once (one round trip): their `k` nearest current findings of the same jurisdiction
+ * (latest embedding of `engine`). Used to tell whether new neighbours arrived since a grouping decision.
+ */
+export const nearestOfMany = async (
+  db: PrismaService,
+  findingIds: readonly string[],
+  engine: string,
+  dims: number,
+  k: number,
+): Promise<ReadonlyMap<string, readonly string[]>> => {
+  if (findingIds.length === 0) return new Map();
+  const type = vectorType(dims);
+  const rows = await withIterativeScan<{ of: string; id: string }>(
+    db,
+    Prisma.sql`
+      SELECT q.id AS of, n.id FROM unnest(${[...findingIds]}::uuid[]) AS q(id)
+      JOIN finding_current qf ON qf.id = q.id
+      CROSS JOIN LATERAL (SELECT vector FROM embedding
+                          WHERE finding_id = q.id AND engine = ${engine} AND dims = ${dims}
+                          ORDER BY created_at DESC LIMIT 1) me
+      CROSS JOIN LATERAL (
+        SELECT e.finding_id AS id FROM embedding e JOIN finding_current fc ON fc.id = e.finding_id
+        WHERE e.dims = ${dims} AND e.engine = ${engine} AND e.finding_id <> q.id AND fc.jurisdiction = qf.jurisdiction
+        ORDER BY (e.vector::${type}) <=> (me.vector::${type}) LIMIT ${k}) n`,
+  );
+  return new Map([...Map.groupBy(rows, (r) => r.of)].map(([of, rs]) => [of, rs.map((r) => r.id)] as const));
 };
 
 /** Rationale prefix of a grouping decision whose agent run failed (stored as "separate"). */
 export const GROUPING_FAILED_PREFIX = 'agent failed: ';
 
 /**
- * Latest grouping decision of an engine per finding: whether that run failed, and if so, whether a retry
- * is due (backoff per retryDue) or the stage gave up (MAX_ATTEMPTS failed runs; then only new evidence
- * brings the group back).
+ * Latest grouping decision of an engine per item (`source:id`, so a decision on an older version of the item still
+ * counts): whether that run failed, and if so, whether a retry is due (backoff per retryDue) or the stage gave up
+ * (MAX_ATTEMPTS failed runs since the last successful decision; then only new evidence brings the group back).
  */
 export const latestGroupDecisions = async (
   db: PrismaService,
@@ -236,14 +291,19 @@ export const latestGroupDecisions = async (
           gave_up: boolean;
         }[]
       >`
-        SELECT finding_id, decision, created_at, failed, ${retryDue(Prisma.sql`failures`, Prisma.sql`created_at`, retryAfterSeconds)} AS retry_due,
+        WITH l AS (
+          SELECT g.id, g.decision, g.created_at, f.source_id || ':' || f.external_id AS item,
+                 starts_with(g.rationale, ${GROUPING_FAILED_PREFIX}) AS failed
+          FROM group_link g JOIN finding f ON f.id = g.finding_id WHERE g.engine = ${engine}
+        ), counted AS (
+          SELECT l.*, count(*) FILTER (WHERE l.failed AND l.created_at > coalesce(ok.at, '-infinity'))
+                        OVER (PARTITION BY l.item) AS failures
+          FROM l LEFT JOIN (SELECT item, max(created_at) AS at FROM l WHERE NOT failed GROUP BY item) ok USING (item)
+        )
+        SELECT item AS finding_id, decision, created_at, failed,
+               ${retryDue(Prisma.sql`failures`, Prisma.sql`created_at`, retryAfterSeconds)} AS retry_due,
                failures >= ${MAX_ATTEMPTS} AS gave_up
-        FROM (
-          SELECT DISTINCT ON (finding_id) finding_id, decision, created_at,
-                 starts_with(rationale, ${GROUPING_FAILED_PREFIX}) AS failed,
-                 count(*) FILTER (WHERE starts_with(rationale, ${GROUPING_FAILED_PREFIX})) OVER (PARTITION BY finding_id) AS failures
-          FROM group_link WHERE engine = ${engine}
-          ORDER BY finding_id, created_at DESC, id DESC) d`
+        FROM (SELECT DISTINCT ON (item) * FROM counted ORDER BY item, created_at DESC, id DESC) d`
     ).map((r) => [
       r.finding_id,
       {
@@ -319,11 +379,16 @@ export const findingsMentioning = async (
   return rows.map((r) => r.id);
 };
 
-/** Already classified current groups that contain one of the findings, with their labels (precedents). */
+/**
+ * Already classified current groups that contain one of the findings, with their labels (precedents). Groups that
+ * share a member with the group being classified (`ownMemberIds`, e.g. its own earlier snapshot under another key
+ * before the read models are refreshed after a merge) are left out, so the agent never copies its own old verdict.
+ */
 export const classifiedGroupsContaining = async (
   db: PrismaService,
   findingIds: readonly string[],
   excludeKey: string,
+  ownMemberIds: readonly string[] = [],
 ): Promise<
   readonly {
     readonly group_key: string;
@@ -342,9 +407,14 @@ export const classifiedGroupsContaining = async (
                  FROM radar_label_current l WHERE l.group_key = g.group_key) x), '[]'::jsonb) AS labels
         FROM radar_group_current g
         WHERE g.member_ids && ${[...findingIds]}::uuid[] AND g.group_key <> ${excludeKey}
+          AND NOT g.member_ids && ${[...ownMemberIds]}::uuid[]
           AND g.classification_id IS NOT NULL`;
 
-/** NACE codes closest to a query vector (semantic code search over title + explanatory notes). */
+/**
+ * NACE codes closest to a query vector (semantic code search over title + explanatory notes). Only the latest
+ * embedding of each code counts, so a code whose notes changed is neither listed twice nor ranked by stale notes.
+ * The table is small (one row per code and notes version), so it is scanned exactly instead of via the index.
+ */
 export const nearestNaceCodes = async (
   db: PrismaService,
   vector: readonly number[],
@@ -354,9 +424,11 @@ export const nearestNaceCodes = async (
   const type = vectorType(vector.length);
   const literal = `[${vector.join(',')}]`;
   return db.$queryRaw`
-    SELECT code, ((vector::${type}) <=> ${literal}::${type})::float AS distance FROM nace_embedding
-    WHERE engine = ${engine} AND dims = ${vector.length}
-    ORDER BY (vector::${type}) <=> ${literal}::${type} LIMIT ${k}`;
+    SELECT code, ((vector::${type}) <=> ${literal}::${type})::float AS distance FROM (
+      SELECT DISTINCT ON (code) code, vector FROM nace_embedding
+      WHERE engine = ${engine} AND dims = ${vector.length}
+      ORDER BY code, created_at DESC, id DESC) n
+    ORDER BY distance, code LIMIT ${k}`;
 };
 
 /** Latest snapshot hash and retired flag per group key. */
@@ -372,12 +444,14 @@ export const latestSnapshotHashes = async (
   );
 
 /**
- * Latest labels of every group that last contained one of these findings (any engine). Used to keep
- * previously relevant pairs tracked, also when groups merged and the merged group got another name.
+ * Latest labels of the same engine for every group that last contained one of these findings. Used to keep
+ * previously relevant pairs tracked, also when groups merged and the merged group got another name. Fallback
+ * results of failed agent runs and results of other engines (or older rule versions) are not carried over.
  */
 export const previousLabels = async (
   db: PrismaService,
   memberIds: readonly string[],
+  engine: string,
 ): Promise<readonly CountryLabel[]> =>
   db.$queryRaw<CountryLabel[]>`
     WITH prior AS (
@@ -385,7 +459,9 @@ export const previousLabels = async (
       WHERE NOT retired ORDER BY group_key, created_at DESC, id DESC)
     SELECT l.country, l.nace_code AS "naceCode", l.verdict::text AS verdict, l.score, l.rationale
     FROM prior p
-    JOIN LATERAL (SELECT id FROM classification c WHERE c.group_key = p.group_key
+    JOIN LATERAL (SELECT id FROM classification c
+                  WHERE c.group_key = p.group_key AND c.engine = ${engine}
+                    AND NOT starts_with(c.why_relevant, ${CLASSIFICATION_FAILED_PREFIX})
                   ORDER BY c.created_at DESC, c.id DESC LIMIT 1) c ON true
     JOIN relevance_label l ON l.classification_id = c.id
     WHERE p.member_ids && ${[...memberIds]}::uuid[]`;

@@ -40,11 +40,15 @@ const envSchema = z.object({
   RADAR_AS_OF: isoDate,
   LLM_PROVIDER: z.enum(['none', ...LLM_PROVIDERS]).default('none'),
   MISTRAL_API_KEY: z.string().default(''),
-  MISTRAL_CHAT_MODEL: z.string().default('mistral-medium-latest'),
+  MISTRAL_CHAT_MODEL: z.string().default('mistral-large-4'),
   MISTRAL_EMBED_MODEL: z.string().default('mistral-embed'),
+  /**
+   * Mistral's global endpoint by default: it has the built-in web search the agents use. https://api.eu.mistral.ai
+   * keeps inference in EU/EFTA data centres but supports function calling only (no web search).
+   */
   MISTRAL_SERVER_URL: z.string().default('https://api.mistral.ai'),
   OPENAI_API_KEY: z.string().default(''),
-  OPENAI_CHAT_MODEL: z.string().default('gpt-6.2-sol'),
+  OPENAI_CHAT_MODEL: z.string().default('gpt-6-luna'),
   OPENAI_EMBED_MODEL: z.string().default('text-embedding-3-large'),
   OPENAI_BASE_URL: z.string().default('https://api.openai.com/v1'),
   AGENT_INTERNET_ACCESS: bool(true),
@@ -91,6 +95,13 @@ export interface LlmSettings {
   readonly warnings: readonly string[];
 }
 
+/**
+ * True when Mistral is called through a regional endpoint (api.eu.mistral.ai, api.us.mistral.ai). Regional
+ * inference supports function calling only: the built-in web_search tool (Conversations API) is global-only. Pure.
+ */
+export const mistralRegional = (env: Pick<Env, 'MISTRAL_SERVER_URL'>): boolean =>
+  new URL(env.MISTRAL_SERVER_URL).hostname !== 'api.mistral.ai';
+
 /** API key of each provider. */
 const apiKeyOf = (env: Env): Readonly<Record<LlmProviderId, string>> => ({
   mistral: env.MISTRAL_API_KEY,
@@ -105,7 +116,11 @@ export const llmSettings = (env: Env): LlmSettings => {
   const provider = env.LLM_PROVIDER !== 'none' && apiKeyOf(env)[env.LLM_PROVIDER] ? env.LLM_PROVIDER : 'none';
   const warnings =
     provider !== 'none'
-      ? []
+      ? provider === 'mistral' && mistralRegional(env) && env.AGENT_INTERNET_ACCESS
+        ? [
+            `Mistral regional inference (${new URL(env.MISTRAL_SERVER_URL).hostname}): the provider's built-in web search is not available in the region, so agents use fetch_url for public pages only.`,
+          ]
+        : []
       : [
           env.LLM_PROVIDER === 'none'
             ? 'Offline mode (no LLM provider): no translations and no embeddings are produced; grouping and relevance use deterministic best-effort rules.'

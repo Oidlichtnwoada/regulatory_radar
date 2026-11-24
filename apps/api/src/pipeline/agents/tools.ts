@@ -2,12 +2,13 @@ import type { EmbeddingsInterface } from '@langchain/core/embeddings';
 import { type StructuredToolInterface, tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { errorMessage } from '../../common/fp.js';
+import { AGENT_SQL_MAX_ROWS, type SqlReader } from '../../db/agent-reader.js';
 import type { PrismaService } from '../../db/prisma.service.js';
 import type { GroupMember } from '../../domain/grouping.js';
 import { type NaceTaxonomy, searchNaceText } from '../../domain/nace.js';
 import type { ChatProvider } from '../../llm/providers.js';
-import { politeGet } from '../../sources/http.js';
 import { membersByIds, nearestFindings, nearestNaceCodes } from '../repository.js';
+import { fetchPublic } from './public-fetch.js';
 
 /** Options shared by the agent stages (grouping and classification). */
 export interface AgentOptions {
@@ -29,6 +30,10 @@ export interface AgentOptions {
   readonly internet: boolean;
   /** Embeddings for semantic NACE search (null offline). */
   readonly queryEmbeddings: EmbeddingsInterface | null;
+  /** Backend of sql_query (its own read-only login role); without it the tool answers with an error. */
+  readonly sqlReader?: SqlReader | null;
+  /** Aborts running agent calls (shutdown). */
+  readonly signal?: AbortSignal;
 }
 
 /** What the tools can see. */
@@ -47,6 +52,8 @@ export interface ToolContext {
   readonly webSearch: ChatProvider['webSearch'] | null;
   /** Embeddings for semantic NACE search (null offline). */
   readonly queryEmbeddings: EmbeddingsInterface | null;
+  /** Backend of sql_query, or null when it is unavailable. */
+  readonly sql: SqlReader | null;
   /** Current group key of a finding. */
   readonly groupKeyOf: (findingId: string) => string | undefined;
   /** Current member ids of a group. */
@@ -69,6 +76,7 @@ export const toolContext = (
   internet: opts.internet,
   webSearch: chat.webSearch,
   queryEmbeddings: opts.queryEmbeddings,
+  sql: opts.sqlReader ?? null,
   groupKeyOf,
   membersOf,
 });
@@ -121,20 +129,8 @@ group_link(finding_id, engine, decision, target_group_key, rationale) - agent gr
 radar_label_current(group_key, country, nace_code, nace_path ltree, verdict, score, rationale) - current relevance labels
 Full-text: to_tsvector('simple', title || ' ' || coalesce(summary, '')) @@ websearch_to_tsquery('simple', '...').`;
 
-/**
- * Runs one model-written SELECT under the radar_agent_reader role (SELECT privileges only) in a READ ONLY
- * transaction with a 5 s timeout, capped at 50 rows.
- */
-const readOnlyQuery = async (db: PrismaService, sql: string): Promise<unknown> => {
-  const body = sql.trim().replace(/;\s*$/, '');
-  if (body.includes(';')) throw new Error('exactly one statement, without ";"');
-  return db.$transaction(async (tx) => {
-    await tx.$executeRawUnsafe('SET TRANSACTION READ ONLY');
-    await tx.$executeRawUnsafe("SET LOCAL statement_timeout = '5s'");
-    await tx.$executeRawUnsafe('SET LOCAL ROLE radar_agent_reader');
-    return tx.$queryRawUnsafe(`SELECT * FROM (${body}) AS agent_query LIMIT 50`);
-  });
-};
+/** Largest page body fetch_url reads (bytes). */
+const MAX_PAGE_BYTES = 2_000_000;
 
 /** Strips HTML to readable text (for fetch_url). */
 const htmlToText = (html: string): string =>
@@ -222,17 +218,25 @@ export const agentTools = (ctx: ToolContext): readonly StructuredToolInterface[]
       },
     ),
     tool(
-      safe(async ({ sql }: { sql: string }) => readOnlyQuery(ctx.db, sql)),
+      safe(async ({ sql }: { sql: string }) => {
+        if (!ctx.sql) return { error: 'sql_query is unavailable' };
+        return ctx.sql(sql);
+      }),
       {
         name: 'sql_query',
-        description: `Run one read-only SQL SELECT against the radar database (max 50 rows, 5 s). ${SQL_SCHEMA}`,
+        description: `Run one read-only SQL SELECT against the radar database (max ${AGENT_SQL_MAX_ROWS} rows, 5 s, long rows are cut). ${SQL_SCHEMA}`,
         schema: z.object({ sql: z.string().min(8).max(4000) }),
       },
     ),
     tool(
       safe(async ({ query }: { query: string }) => {
-        if (!ctx.internet || !ctx.webSearch)
+        if (!ctx.internet)
           return { error: 'web search is disabled (offline or AGENT_INTERNET_ACCESS=false)' };
+        if (!ctx.webSearch)
+          return {
+            error:
+              "the provider's web search is not available with EU regional inference; use fetch_url on a known public URL instead",
+          };
         return ctx.webSearch(query);
       }),
       {
@@ -306,8 +310,8 @@ export const agentTools = (ctx: ToolContext): readonly StructuredToolInterface[]
     tool(
       safe(async ({ url }: { url: string }) => {
         if (!ctx.internet) return { error: 'internet access is disabled (AGENT_INTERNET_ACCESS=false)' };
-        const res = await politeGet(url, { timeoutMs: 20_000, attempts: 1 });
-        return { status: res.status, text: htmlToText(await res.text()).slice(0, 6000) };
+        const res = await fetchPublic(url, { timeoutMs: 20_000, maxBytes: MAX_PAGE_BYTES });
+        return { status: res.status, url: res.url, text: htmlToText(res.text).slice(0, 6000) };
       }),
       {
         name: 'fetch_url',

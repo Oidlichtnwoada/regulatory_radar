@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { ConsoleLogger, type INestApplicationContext } from '@nestjs/common';
+import { ConsoleLogger, type INestApplication, type INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { Express } from 'express';
 import swaggerUi from 'swagger-ui-express';
@@ -27,12 +27,15 @@ const shutdownSignal = (): AbortSignal => {
   return controller.signal;
 };
 
-/** HTTP API: REST under /api/v1, the OpenAPI document, Swagger UI and the MCP endpoint. */
-const startApi = async (env: Env): Promise<void> => {
+/**
+ * HTTP API: REST under /api/v1, the OpenAPI document, Swagger UI and the MCP endpoint. With `shutdownHooks` Nest
+ * closes the app on SIGTERM/SIGINT itself (API-only process); otherwise the caller closes it.
+ */
+const startApi = async (env: Env, shutdownHooks: boolean): Promise<INestApplication> => {
   const app = await NestFactory.create(apiModule(env), { logger });
   app.setGlobalPrefix('api/v1');
   app.useGlobalFilters(new ProblemFilter());
-  app.enableShutdownHooks();
+  if (shutdownHooks) app.enableShutdownHooks();
   const spec = app.get<ApiSpec>(SPEC);
   const http = app.getHttpAdapter().getInstance() as Express;
   http.get('/api/openapi.yaml', (_req, res) => void res.type('application/yaml').send(spec.text));
@@ -40,6 +43,7 @@ const startApi = async (env: Env): Promise<void> => {
   http.post('/mcp', mcpHandler(spec, `http://127.0.0.1:${env.API_PORT}/api/v1`));
   await app.listen(env.API_PORT, '0.0.0.0');
   logger.log(`API on :${env.API_PORT} (REST /api/v1, docs /api/docs, MCP /mcp)`, 'Main');
+  return app;
 };
 
 /** Runs ingestion and the pipeline until the process is stopped. */
@@ -65,11 +69,16 @@ const main = async (): Promise<void> => {
   note(`mode ${settings.mode}, database ${new URL(databaseUrlFor(env)).pathname.slice(1)}`);
   settings.warnings.forEach(note);
   if (command === 'migrate') await migrate(env);
-  if (command === 'api' || command === 'all') await startApi(env);
+  if (command === 'api') await startApi(env, true);
   if (command === 'worker' || command === 'all') {
+    // In `all` the worker owns the shutdown: Nest's hook would re-raise the signal and kill the worker mid-cycle,
+    // so the API is closed here, after the worker has finished its current work.
+    const signal = shutdownSignal();
+    const api = command === 'all' ? await startApi(env, false) : null;
     const ctx = await NestFactory.createApplicationContext(workerModule(env), { logger });
-    await runWorker(ctx, shutdownSignal());
+    await runWorker(ctx, signal);
     await ctx.close();
+    await api?.close();
   }
   if (command === 'eval') {
     const ctx = await NestFactory.createApplicationContext(workerModule(env), {

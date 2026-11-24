@@ -9,6 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { apiModule } from '../src/app.module.js';
 import { migrate } from '../src/cli/migrate.js';
 import { type Env, loadEnv } from '../src/config/env.js';
+import { AgentSqlReader } from '../src/db/agent-reader.js';
 import { PrismaService } from '../src/db/prisma.service.js';
 import { loadTaxonomy } from '../src/domain/nace.js';
 import { ProblemFilter } from '../src/http/controllers.js';
@@ -320,7 +321,7 @@ describe('pipeline in online mode with scripted LLM providers', () => {
     expect(JSON.stringify(link?.trace)).toContain('Pre-computed candidate groups');
     expect(link?.rationale).toContain('Evidence:');
     const cls = await ctx.db.classification.findFirst({
-      where: { engine: 'agent:openai:scripted', groupKey: 'AT-GAZ-0037' },
+      where: { engine: { startsWith: 'agent:openai:scripted@' }, groupKey: 'AT-GAZ-0037' },
     });
     expect(cls?.whyRelevant).toBe('scripted agent classification');
   });
@@ -339,7 +340,9 @@ describe('pipeline in online mode with scripted LLM providers', () => {
   });
 
   it('gives the classification agent action points, rule hints and precedents up front', async () => {
-    const cls = await ctx.db.classification.findFirst({ where: { engine: 'agent:openai:scripted' } });
+    const cls = await ctx.db.classification.findFirst({
+      where: { engine: { startsWith: 'agent:openai:scripted@' } }, // + rules version
+    });
     const trace = JSON.stringify(cls?.trace);
     expect(trace).toContain('Hints of the deterministic keyword rules');
     expect(trace).toContain('Precedents');
@@ -365,6 +368,7 @@ describe('pipeline in online mode with scripted LLM providers', () => {
         internet: false,
         webSearch: null,
         queryEmbeddings: null,
+        sql: ctx.app.get(AgentSqlReader).query,
         groupKeyOf: () => undefined,
         membersOf: () => [],
       }).map((t) => [t.name, t]),
@@ -384,6 +388,22 @@ describe('pipeline in online mode with scripted LLM providers', () => {
     expect((await call('sql_query', { sql: "SELECT pg_read_file('/etc/hostname')" })).error).toMatch(
       /denied/,
     );
+    // Its own login role: no way back to the owner's (superuser) role, no second statement, at most 50 rows.
+    const [ownerRow] = await ctx.db.$queryRaw<{ owner: string }[]>`SELECT current_user AS owner`;
+    const owner = ownerRow?.owner ?? 'radar';
+    const [who] = await call('sql_query', { sql: 'SELECT current_user AS u, session_user AS s' });
+    expect(who).toEqual({ u: 'radar_agent_reader', s: 'radar_agent_reader' });
+    expect(
+      (await call('sql_query', { sql: `SELECT set_config('role', '${owner}', true) AS r` })).error,
+    ).toMatch(/permission denied|must be member/);
+    expect((await call('sql_query', { sql: 'SELECT 1; COMMIT' })).error).toBeDefined();
+    expect((await call('sql_query', { sql: 'SELECT * FROM operator_profile' })).error).toMatch(/denied/);
+    const many = await call('sql_query', {
+      sql: 'SELECT f.id FROM finding f CROSS JOIN finding g) AS x --',
+    });
+    expect(Array.isArray(many) ? many.length : 0).toBeLessThanOrEqual(50);
+    const capped = await call('sql_query', { sql: 'SELECT f.id FROM finding f CROSS JOIN finding g' });
+    expect(capped).toHaveLength(50);
     const [any] = hits;
     const near = await call('nearest_findings', { findingId: any.id, k: 3 });
     expect(near).toHaveLength(3);
@@ -470,7 +490,7 @@ describe('pipeline in online mode with scripted LLM providers', () => {
     const count = (engine: string, failed: boolean) =>
       ctx.db.classification.count({
         where: {
-          engine,
+          engine: { startsWith: `${engine}@` }, // + rules version
           whyRelevant: failed
             ? { startsWith: CLASSIFICATION_FAILED_PREFIX }
             : { not: { startsWith: CLASSIFICATION_FAILED_PREFIX } },

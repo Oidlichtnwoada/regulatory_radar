@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { validatedDraft } from '../domain/finding.js';
 import { loadTaxonomy } from '../domain/nace.js';
+import { newVersions } from '../ingestion/ingestion.service.js';
 import { eurlexStart } from './eurlex.source.js';
 import { fileSource } from './file.source.js';
 
@@ -78,5 +79,43 @@ describe('EUR-Lex pass start', () => {
       day('2026-11-18'),
     );
     expect(eurlexStart(opts, null, now)).toEqual(day('2026-11-10'));
+  });
+});
+
+describe('review fixes: a record the database cannot store is rejected, never fatal', () => {
+  const source = sourceOver(seed);
+  const draftOf = (patch: Record<string, unknown>) =>
+    source.normalize({ externalId: 'x', payload: { ...seed[0], ...patch } as never });
+
+  it('rejects a missing document type, a topic string instead of a list, and NUL characters', () => {
+    expect(() => validatedDraft(draftOf({ doc_type: undefined }))).toThrow(/docType/);
+    expect(() => validatedDraft(draftOf({ topics: 'energy' }))).toThrow(/topics/);
+    expect(() => validatedDraft(draftOf({ title: 'a\u0000b' }))).toThrow(/NUL/);
+  });
+
+  it('states sector tags only when the item lists them', () => {
+    expect(draftOf({ nace_tags: undefined }).naceTagsStated).toBe(false);
+    expect(draftOf({ nace_tags: null }).naceTagsStated).toBe(false);
+    expect(draftOf({ nace_tags: ['C24'] }).naceTagsStated).toBe(true);
+  });
+});
+
+describe('new versions of an item', () => {
+  const r = (externalId: string, contentHash: string) => ({ externalId, contentHash });
+
+  it('skips a record equal to the latest stored version, keeps one that changes back (A -> B -> A)', () => {
+    const latest = new Map([
+      ['x', 'B'],
+      ['y', 'C'],
+    ]);
+    expect(newVersions([r('x', 'A'), r('y', 'C')], latest)).toEqual([r('x', 'A')]);
+  });
+
+  it('compares with earlier records of the same batch, in stream order', () => {
+    expect(newVersions([r('x', 'A'), r('x', 'A'), r('x', 'B'), r('x', 'A')], new Map())).toEqual([
+      r('x', 'A'),
+      r('x', 'B'),
+      r('x', 'A'),
+    ]);
   });
 });

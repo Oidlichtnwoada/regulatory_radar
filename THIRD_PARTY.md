@@ -23,10 +23,10 @@ No bot filter, login or rate limit is worked around. Requests that answer 403 or
 
 ## Models (online mode only, switched on by the operator)
 
-| Provider                                        | Models (defaults, configurable)                                                                                                   | Terms                                                       |
-| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| Mistral AI, La Plateforme (EU-hosted inference) | `mistral-medium-latest` (chat), `mistral-embed` (multilingual embeddings, 1024 dims), Conversations API `web_search`              | [Mistral terms of use](https://mistral.ai/terms)            |
-| OpenAI API (US/global inference)                | `gpt-6.2-sol` (chat with tool calling), `text-embedding-3-large` (multilingual embeddings, 3072 dims), Responses API `web_search` | [OpenAI terms](https://openai.com/policies/business-terms/) |
+| Provider                                                                                                        | Models (defaults, configurable)                                                                                                       | Terms                                                       |
+| --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Mistral AI, La Plateforme, global endpoint `api.mistral.ai` (optional EU regional endpoint `api.eu.mistral.ai`) | `mistral-large-4` (chat), `mistral-embed` (multilingual embeddings, 1024 dims), Conversations API `web_search` (global endpoint only) | [Mistral terms of use](https://mistral.ai/terms)            |
+| OpenAI API (US/global inference)                                                                                | `gpt-6-luna` (chat with tool calling), `text-embedding-3-large` (multilingual embeddings, 3072 dims), Responses API `web_search`      | [OpenAI terms](https://openai.com/policies/business-terms/) |
 
 In online mode the titles, summaries and NACE codes of public regulatory items are sent to the chosen provider. The agents' `web_search` queries go to the same provider. The operator's profile is never sent: classification is profile-independent.
 

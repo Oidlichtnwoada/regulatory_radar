@@ -44,16 +44,23 @@ export const CONCEPTS: readonly Concept[] = [
     terms: [
       'steel',
       'iron and steel',
-      'ferro',
+      // Not a bare 'ferro': it also starts railway words (ferroviario, ferroviaire, ferrocarril).
+      'ferrous metal',
+      'ferroall',
+      'ferroalea',
+      'ferroleg',
       'stahl',
       'acero',
       'siderurg',
       'acier',
-      'stal',
+      // Polish steel forms only: a bare 'stal' also starts 'staly' (permanent) and English 'stale' / 'stall'.
+      'stal ',
+      'stali ',
+      'stalow',
       'acciai',
       'staal',
     ],
-    exclude: ['iron curtain', 'adding iron'],
+    exclude: ['iron curtain', 'adding iron', 'non-ferrous', 'non ferrous'],
   },
   {
     label: 'non-ferrous metals',
@@ -187,6 +194,10 @@ export const CONCEPTS: readonly Concept[] = [
       'industrial gas consumers',
       'consumer protection',
       'comercio exterior',
+      // 'store' as a verb or a building storey, not a shop.
+      'stored',
+      'storey',
+      'energy store',
     ],
   },
   {
@@ -218,7 +229,12 @@ export const CONCEPTS: readonly Concept[] = [
       'cereal',
       'getreide',
       'zboz',
-      'farm',
+      'farm ',
+      'farm-',
+      'farms',
+      'farmer',
+      'farming',
+      'farmland',
       'agricultur',
       'landwirtschaft',
       'rolnict',
@@ -266,6 +282,8 @@ export const CONCEPTS: readonly Concept[] = [
   {
     label: 'financial services',
     nace: ['L64', 'L66'],
+    // Tax and carbon credits are not lending.
+    exclude: ['tax credit', 'credito fiscal', "credit d'impot", 'carbon credit', 'steuergutschrift'],
     terms: [
       'credit',
       'payment services',

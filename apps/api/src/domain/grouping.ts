@@ -21,19 +21,31 @@ export interface GroupMember extends FindingDraft {
   readonly streamSeq: number;
 }
 
-/** An agent decision that a finding belongs to an existing group. */
+/**
+ * An agent decision that an item belongs to an existing group. Stored per finding, resolved per item (source and
+ * item id), so it still applies after a new version of the item arrives.
+ */
 export interface AgentJoin {
-  /** The finding that joins. */
-  readonly findingId: string;
-  /** The group it joins. */
+  /** Source of the joining item. */
+  readonly sourceId: string;
+  /** Id of the joining item in its source. */
+  readonly externalId: string;
+  /** The group it joins: `source:id` of the target's first-streamed item (older decisions: a plain group key). */
   readonly targetGroupKey: string;
 }
+
+/** Unambiguous reference of an item across sources (`source:id`); also the qualified form of a group key. */
+export const itemRef = (m: Pick<GroupMember, 'sourceId' | 'externalId'>): string =>
+  `${m.sourceId}:${m.externalId}`;
 
 /** Union-find node of an item (internal; group keys are item ids, see computeGroups). */
 const itemKey = (m: Pick<GroupMember, 'sourceId' | 'externalId'>): string =>
   `item:${m.sourceId}:${m.externalId}`;
-/** Union-find node of a procedure reference (internal). */
-const refNode = (ref: string): string => `ref:${ref}`;
+/**
+ * Union-find node of a procedure reference within one jurisdiction (internal): generic national references such as
+ * "2026/1" must not link different countries' acts.
+ */
+const refNode = (jurisdiction: string, ref: string): string => `ref:${jurisdiction}|${ref}`;
 
 /** The member that was streamed first (ties: source, then item id). */
 export const firstStreamed = <M extends Pick<GroupMember, 'streamSeq' | 'sourceId' | 'externalId'>>(
@@ -52,7 +64,8 @@ export const firstStreamed = <M extends Pick<GroupMember, 'streamSeq' | 'sourceI
  * joins are merged with union-find. A group is named after its member that was streamed first (the same
  * convention as data/eval/labels.json); later steps and reactions arrive later, so names stay stable while
  * groups grow. Should two sources use the same item id, the colliding names get a `source:` prefix.
- * Agent joins name their target by group key. Returns group key -> member ids (sorted).
+ * Agent joins are resolved per item and name their target as `source:id` (or, from older decisions, a plain item
+ * id that is unique among the members). Returns group key -> member ids (sorted).
  */
 export const computeGroups = (
   members: readonly GroupMember[],
@@ -71,19 +84,19 @@ export const computeGroups = (
     const [ra, rb] = [find(a), find(b)].sort();
     if (ra !== undefined && rb !== undefined && ra !== rb) parent.set(rb, ra);
   };
-  const nodeOf = new Map(members.map((m) => [m.id, itemKey(m)]));
+  const items = new Set(members.map(itemKey));
   const byExternal = Map.groupBy(members, (m) => m.externalId);
-  // A group key names an item: the plain item id, or source:id after a collision.
-  const nodeOfKey = new Map(
-    members.flatMap((m) => [
-      [m.externalId, itemKey(m)],
-      [`${m.sourceId}:${m.externalId}`, itemKey(m)],
-    ]),
-  );
+  // A join target names an item: source:id always; a plain item id only when no other source uses it.
+  const nodeOfKey = new Map([
+    ...members.map((m) => [itemRef(m), itemKey(m)] as const),
+    ...[...byExternal]
+      .filter(([, ms]) => new Set(ms.map(itemKey)).size === 1)
+      .map(([id, ms]) => [id, itemKey(ms[0] as GroupMember)] as const),
+  ]);
 
   members.forEach((m) => {
     const node = itemKey(m);
-    if (m.refKey) union(refNode(m.refKey), node);
+    if (m.refKey) union(refNode(m.jurisdiction, m.refKey), node);
     const target =
       m.relatedTo &&
       (byExternal.get(m.relatedTo)?.find((t) => t.sourceId === m.sourceId) ??
@@ -91,9 +104,9 @@ export const computeGroups = (
     if (target) union(itemKey(target), node);
   });
   joins.forEach((j) => {
-    const node = nodeOf.get(j.findingId);
+    const node = itemKey(j);
     const target = nodeOfKey.get(j.targetGroupKey);
-    if (node && target) union(target, node);
+    if (items.has(node) && target) union(target, node);
   });
 
   const components = [...Map.groupBy(members, (m) => find(itemKey(m))).values()];

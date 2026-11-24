@@ -124,7 +124,8 @@ export const fileSource = (tax: NaceTaxonomy, opts: FileSourceOptions): SourceAd
       eventDate: i.event_date,
       ref: i.ref,
       relatedTo: i.related_to,
-      naceTagsStated: i.nace_tags !== null,
+      // Stated only when the item lists tags (null or a missing key means the channel gives no sector information).
+      naceTagsStated: Array.isArray(i.nace_tags),
       naceTags: [
         // Seed tags are NACE Rev. 2: mapped with Eurostat's correspondence (one tag may become several codes).
         ...mapRev2Codes(tax, tags),

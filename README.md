@@ -10,7 +10,7 @@ docker compose up --build          # http://localhost:8080 (UI) · /api/docs (Op
 docker compose run --rm eval       # recall/precision per profile against both eval sets
 ```
 
-The default run is **offline**: no key, no network, seed file only. For **online** mode, copy `.env.example` to `.env` and set `LLM_PROVIDER=mistral` with `MISTRAL_API_KEY` (EU-hosted inference) or `LLM_PROVIDER=openai` with `OPENAI_API_KEY` (US/global). One provider serves both the tool-calling chat model and the multilingual embeddings. Enable the live sources with `SOURCE_EURLEX_ENABLED=true` / `SOURCE_BOE_ENABLED=true`; switch off the seed file with `SOURCE_FILE_ENABLED=false` (live sources only). Items already ingested stay, because the database is append-only; for a radar without seed data, start on an empty data directory (`POSTGRES_DATA_DIR=./.pgdata-live`). Each mode keeps its own database (`radar_offline`, `radar_online`) in `./.pgdata`. Postgres is the only state: `docker compose down && up` keeps everything.
+The default run is **offline**: no key, no network, seed file only. For **online** mode, copy `.env.example` to `.env` and set `LLM_PROVIDER=mistral` with `MISTRAL_API_KEY` (Mistral's global endpoint, with its built-in web search for the agents; `MISTRAL_SERVER_URL=https://api.eu.mistral.ai` keeps inference in EU/EFTA data centres but has no web search) or `LLM_PROVIDER=openai` with `OPENAI_API_KEY` (US/global). One provider serves both the tool-calling chat model and the multilingual embeddings. Enable the live sources with `SOURCE_EURLEX_ENABLED=true` / `SOURCE_BOE_ENABLED=true`; switch off the seed file with `SOURCE_FILE_ENABLED=false` (live sources only). Items already ingested stay, because the database is append-only; for a radar without seed data, start on an empty data directory (`POSTGRES_DATA_DIR=./.pgdata-live`). Each mode keeps its own database (`radar_offline`, `radar_online`) in `./.pgdata`. Postgres is the only state: `docker compose down && up` keeps everything.
 
 On the radar page, one click selects one of the three example profiles (Metals · Austria, Retail · Spain, Agri-food · Poland). They are mapped from the examples' NACE Rev. 2 codes to Rev. 2.1, which is not 100 % identical; the UI shows the difference.
 
@@ -26,7 +26,7 @@ flowchart LR
     B[BOE open data<br/>API · ES]
   end
   subgraph Worker["worker (NestJS)"]
-    I[1 Ingest<br/>deterministic, dedup by<br/>content hash, watermark]
+    I[1 Ingest<br/>deterministic, new versions<br/>only, watermark]
     T[2 Translate → EN<br/>LLM]
     M[3a Embed<br/>multilingual 1024/3072 dims<br/>compact if > 8192 tokens]
     G[3b Group procedures<br/>ref/related_to + LangGraph agent]
@@ -36,7 +36,7 @@ flowchart LR
     R[(append-only tables<br/>raw_record · finding · translation<br/>embedding·pgvector · group_snapshot<br/>classification · relevance_label·ltree)]
     V[(materialized read models<br/>+ radar_actionability&#40;&#41;)]
   end
-  LLM{{one ML/AI provider<br/>LangChain chat + embeddings<br/>Mistral EU · OpenAI}}
+  LLM{{one ML/AI provider<br/>LangChain chat + embeddings<br/>Mistral · OpenAI}}
   F & E & B --> I --> R
   R --> T --> M --> G --> C --> R
   T & M & G & C -.-> LLM
@@ -150,7 +150,7 @@ The honest test is live data. The online run (`scripts/eval.sh online`) needs a 
 3. **Recall over precision.** Default view shows relevant + borderline, stated tags are always relevant, and "stays tracked" means an LLM can add but not remove.
 4. **"Same procedure" = shared ref or a reaction (related_to), plus agent joins.** The agent is told that a wrong merge hides an item, and its decisions are stored with rationale and trace.
 5. **Ranking lives in one SQL function** with a pure `asOf` parameter, for determinism and so the API, digest and eval share it.
-6. **Two modes, two databases, one provider.** Offline and online results never mix. The mode depends only on `LLM_PROVIDER` and its key. Chat and embeddings always come from the same provider (Mistral for EU-hosted inference, OpenAI for US/global), each behind LangChain's `BaseChatModel` and `EmbeddingsInterface`, so switching is one env variable. Embeddings keep their native size (mistral-embed 1024, text-embedding-3-large 3072) in one untyped `vector` column with a partial HNSW index per size (`halfvec` for 3072). Texts over the 8192-token input limit are compacted once by the chat model, then cut at the limit. Every row stores its engine id, so a switch re-embeds instead of mixing vectors.
+6. **Two modes, two databases, one provider.** Offline and online results never mix. The mode depends only on `LLM_PROVIDER` and its key. Chat and embeddings always come from the same provider (Mistral or OpenAI), each behind LangChain's `BaseChatModel` and `EmbeddingsInterface`, so switching is one env variable. **Mistral in the EU is possible, but without web search:** the default is Mistral's global endpoint (`api.mistral.ai`), because only there do the agents get Mistral's built-in web search. `MISTRAL_SERVER_URL=https://api.eu.mistral.ai` switches to Mistral's EU regional inference (EU/EFTA data centres, 10 % surcharge). That region supports function calling only, so the agents have **no web search**: the `web_search` tool answers that it is unavailable, the agents can still open known public pages with `fetch_url`, and the status page shows a warning. Embeddings keep their native size (mistral-embed 1024, text-embedding-3-large 3072) in one untyped `vector` column with a partial HNSW index per size (`halfvec` for 3072). Texts over the 8192-token input limit are compacted once by the chat model, then cut at the limit. Every row stores its engine id, so a switch re-embeds instead of mixing vectors.
 7. **Live sources: EUR-Lex CELLAR and Spain's BOE.** Both are official, keyless and date-addressable, which suits watermarks. A failed day blocks the watermark from advancing, the pass goes on with the next days, and the run shows as `degraded`.
 8. **NACE Rev. 2.1 only**, the current revision. Rev. 2 codes (seed tags, the example profiles) are mapped once, where they enter, with Eurostat's correspondence table, precomputed as a lookup. The mapping is **not 100 % identical**: Rev. 2.1 splits and merges some classes, so the mapped selections are slightly broader. Details per profile: [docs/nace-rev2-to-rev2.1.md](docs/nace-rev2-to-rev2.1.md).
 9. **Left rough:** no auth/TLS; the offline lexicon is tuned to the seed and both eval sets; the online eval needs a key; EUR-Lex gives titles only (no summaries, procedure numbers or consultation deadlines; the Have-your-say API would add those).

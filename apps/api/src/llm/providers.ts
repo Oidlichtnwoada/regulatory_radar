@@ -2,11 +2,48 @@ import type { EmbeddingsInterface } from '@langchain/core/embeddings';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { ChatMistralAI, MistralAIEmbeddings } from '@langchain/mistralai';
 import { ChatOpenAI, OpenAIEmbeddings } from '@langchain/openai';
-import { type Env, type LlmProviderId, llmSettings } from '../config/env.js';
+import { HTTPClient } from '@mistralai/mistralai';
+import { type Env, type LlmProviderId, llmSettings, mistralRegional } from '../config/env.js';
 import { type TokenBudget, tokenBudget } from './tokens.js';
 
 /** Maximum input tokens of both embedding models (mistral-embed and text-embedding-3-large). */
 export const EMBEDDING_MAX_INPUT_TOKENS = 8192;
+
+/** Limit of one provider HTTP request (chat, embeddings, web search); a stalled connection must not hang the worker. */
+export const LLM_REQUEST_TIMEOUT_MS = 120_000;
+
+/**
+ * Supported embedding models and their vector sizes: only these sizes have nearest-neighbour indexes
+ * (vector(1024), halfvec(3072)), so another model is refused at startup instead of failing every item.
+ */
+export const EMBEDDING_MODELS: Readonly<Record<LlmProviderId, Readonly<Record<string, number>>>> = {
+  mistral: { 'mistral-embed': 1024 },
+  openai: { 'text-embedding-3-large': 3072 },
+};
+
+/** Vector size of a provider's embedding model; throws for a model without a known size. */
+export const embeddingDimensions = (provider: LlmProviderId, model: string): number => {
+  const dims = EMBEDDING_MODELS[provider][model];
+  if (!dims)
+    throw new Error(
+      `${provider.toUpperCase()}_EMBED_MODEL=${model} is not supported; use ${Object.keys(EMBEDDING_MODELS[provider]).join(' or ')} (the vector indexes exist for those sizes only)`,
+    );
+  return dims;
+};
+
+/** HTTP client of the Mistral SDK whose requests time out (the LangChain Mistral classes have no timeout option). */
+const mistralHttpClient = (): HTTPClient =>
+  new HTTPClient({
+    fetcher: (input, init) =>
+      fetch(input, {
+        ...init,
+        signal: AbortSignal.any([
+          AbortSignal.timeout(LLM_REQUEST_TIMEOUT_MS),
+          ...(init?.signal ? [init.signal] : []),
+          ...(input instanceof Request ? [input.signal] : []),
+        ]),
+      }),
+  });
 
 /** One cited web page of a provider-native web search. */
 export interface WebSource {
@@ -34,8 +71,8 @@ export interface ChatProvider {
   readonly engine: string;
   /** A LangChain chat model with tool calling. */
   readonly chat: BaseChatModel;
-  /** Web search executed by the provider's own built-in tool. */
-  readonly webSearch: (query: string) => Promise<WebSearchResult>;
+  /** Web search executed by the provider's own built-in tool; null where the endpoint has none (Mistral regional). */
+  readonly webSearch: ((query: string) => Promise<WebSearchResult>) | null;
 }
 
 /** A multilingual embedding model; the pipeline only programs against LangChain's EmbeddingsInterface. */
@@ -66,8 +103,8 @@ interface ProviderParts {
   readonly chatModel: string;
   /** LangChain chat model. */
   readonly chat: BaseChatModel;
-  /** Provider-native web search. */
-  readonly webSearch: (query: string) => Promise<WebSearchResult>;
+  /** Provider-native web search, or null where the provider's endpoint has none (Mistral regional inference). */
+  readonly webSearch: ((query: string) => Promise<WebSearchResult>) | null;
   /** Embedding model, size, input budget and LangChain embeddings. */
   readonly embedding: Omit<EmbeddingProvider, 'engine'>;
 }
@@ -78,7 +115,7 @@ const postJson = async (url: string, apiKey: string, body: unknown): Promise<unk
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(120_000),
+    signal: AbortSignal.timeout(LLM_REQUEST_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`${url}: HTTP ${res.status} ${(await res.text()).slice(0, 300)}`);
   return res.json();
@@ -145,11 +182,13 @@ const FACTORIES: Readonly<Record<LlmProviderId, (env: Env) => ProviderParts>> = 
       serverURL: env.MISTRAL_SERVER_URL,
       temperature: 0,
       maxRetries: 3,
+      httpClient: mistralHttpClient(),
     }),
-    webSearch: mistralWebSearch(env),
+    // The EU endpoint keeps inference in the EU; its only tool is function calling, so no built-in web search.
+    webSearch: mistralRegional(env) ? null : mistralWebSearch(env),
     embedding: {
       model: env.MISTRAL_EMBED_MODEL,
-      dimensions: 1024,
+      dimensions: embeddingDimensions('mistral', env.MISTRAL_EMBED_MODEL),
       // No JS tokenizer for Mistral: cl100k count scaled by 1.3 as a safe over-estimate.
       tokens: tokenBudget(EMBEDDING_MAX_INPUT_TOKENS, 1.3),
       embeddings: new MistralAIEmbeddings({
@@ -159,6 +198,7 @@ const FACTORIES: Readonly<Record<LlmProviderId, (env: Env) => ProviderParts>> = 
         apiKey: env.MISTRAL_API_KEY,
         serverURL: env.MISTRAL_SERVER_URL,
         maxRetries: 3,
+        httpClient: mistralHttpClient(),
       }),
     },
   }),
@@ -170,18 +210,20 @@ const FACTORIES: Readonly<Record<LlmProviderId, (env: Env) => ProviderParts>> = 
       apiKey: env.OPENAI_API_KEY,
       configuration: { baseURL: env.OPENAI_BASE_URL },
       maxRetries: 3,
+      timeout: LLM_REQUEST_TIMEOUT_MS,
     }),
     webSearch: openAiWebSearch(env),
     embedding: {
       model: env.OPENAI_EMBED_MODEL,
-      dimensions: 3072,
+      dimensions: embeddingDimensions('openai', env.OPENAI_EMBED_MODEL),
       tokens: tokenBudget(EMBEDDING_MAX_INPUT_TOKENS),
       embeddings: new OpenAIEmbeddings({
         model: env.OPENAI_EMBED_MODEL,
         apiKey: env.OPENAI_API_KEY,
         configuration: { baseURL: env.OPENAI_BASE_URL },
-        dimensions: 3072,
+        dimensions: embeddingDimensions('openai', env.OPENAI_EMBED_MODEL),
         maxRetries: 3,
+        timeout: LLM_REQUEST_TIMEOUT_MS,
       }),
     },
   }),

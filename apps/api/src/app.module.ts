@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { type DynamicModule, Module, type Provider } from '@nestjs/common';
 import { databaseUrlFor, type Env } from './config/env.js';
+import { AgentSqlReader } from './db/agent-reader.js';
 import { PrismaService } from './db/prisma.service.js';
 import { loadTaxonomy } from './domain/nace.js';
 import { loadPresets } from './domain/presets.js';
@@ -30,6 +31,12 @@ const coreProviders = (env: Env): readonly Provider[] => {
     { provide: SOURCES, useValue: configuredSources(env, taxonomy) },
     { provide: AI, useValue: createAiProviders(env) },
     { provide: PrismaService, useFactory: () => new PrismaService(databaseUrlFor(env)) },
+    {
+      provide: AgentSqlReader,
+      inject: [PrismaService],
+      useFactory: (db: PrismaService) =>
+        new AgentSqlReader(databaseUrlFor(env), (sql) => db.$executeRawUnsafe(sql)),
+    },
     IngestionService,
     PipelineService,
   ];
