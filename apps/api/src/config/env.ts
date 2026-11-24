@@ -40,7 +40,7 @@ const envSchema = z.object({
   RADAR_AS_OF: isoDate,
   LLM_PROVIDER: z.enum(['none', ...LLM_PROVIDERS]).default('none'),
   MISTRAL_API_KEY: z.string().default(''),
-  MISTRAL_CHAT_MODEL: z.string().default('mistral-large-4'),
+  MISTRAL_CHAT_MODEL: z.string().default('mistral-small-2603'),
   MISTRAL_EMBED_MODEL: z.string().default('mistral-embed'),
   /**
    * Mistral's global endpoint by default: it has the built-in web search the agents use. https://api.eu.mistral.ai
@@ -53,6 +53,8 @@ const envSchema = z.object({
   OPENAI_BASE_URL: z.string().default('https://api.openai.com/v1'),
   AGENT_INTERNET_ACCESS: bool(true),
   AGENT_MAX_STEPS: int(12),
+  /** Independent classification agent runs per group whose labels must agree (1 = a single run). */
+  CLASSIFICATION_AGENT_RUNS: int(2),
   LLM_CONCURRENCY: int(3),
   PIPELINE_INTERVAL_SECONDS: int(15),
   PIPELINE_BATCH_SIZE: int(25),

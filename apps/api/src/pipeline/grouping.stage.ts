@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { z } from 'zod';
 import { errorMessage, hashOf, mapLimit } from '../common/fp.js';
 import type { PrismaService } from '../db/prisma.service.js';
@@ -17,6 +18,7 @@ import type { Prisma } from '../generated/prisma/client.js';
 import type { ChatProvider } from '../llm/providers.js';
 import { runAgent } from './agents/graph.js';
 import { type AgentOptions, agentTools, compact, toolContext } from './agents/tools.js';
+import { warnFailures } from './failures.js';
 import {
   currentMembers,
   findingsMentioning,
@@ -27,6 +29,9 @@ import {
   nearestFindings,
   nearestOfMany,
 } from './repository.js';
+
+/** Logger of the stage. */
+const log = new Logger('Grouping');
 
 /** Final answer of the grouping agent. */
 const GroupingDecisionSchema = z.object({
@@ -368,6 +373,13 @@ Pre-computed candidate groups (same jurisdiction only): ${JSON.stringify(candida
       };
     }
   });
+  warnFailures(
+    log,
+    'grouping agent runs',
+    results.length,
+    results.flatMap((r) => (r.failed ? [r.rationale.slice(GROUPING_FAILED_PREFIX.length)] : [])),
+    'kept separate meanwhile, retried later',
+  );
   await db.groupLink.createMany({ data: results.map(({ failed: _, ...row }) => row) });
   return results.filter((r) => !r.failed).length;
 };

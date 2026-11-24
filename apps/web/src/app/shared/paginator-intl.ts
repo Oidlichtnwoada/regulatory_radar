@@ -2,6 +2,11 @@ import { Injectable, inject } from '@angular/core';
 import { MatPaginatorIntl } from '@angular/material/paginator';
 import { TranslocoService } from '@jsverse/transloco';
 
+/** The `paginator.*` texts of the translation file (missing while the language loads). */
+type PaginatorTexts = Partial<
+  Record<'itemsPerPage' | 'nextPage' | 'previousPage' | 'firstPage' | 'lastPage', string>
+>;
+
 /** Angular Material paginator texts from the translation file. */
 @Injectable()
 export class TranslatedPaginatorIntl extends MatPaginatorIntl {
@@ -12,12 +17,12 @@ export class TranslatedPaginatorIntl extends MatPaginatorIntl {
   constructor() {
     super();
     // MatPaginatorIntl is a mutable Material API: its fields are set, then `changes` notifies the paginator.
-    this.transloco.selectTranslateObject<Record<string, string>>('paginator').subscribe((t) => {
-      this.itemsPerPageLabel = t['itemsPerPage'] ?? '';
-      this.nextPageLabel = t['nextPage'] ?? '';
-      this.previousPageLabel = t['previousPage'] ?? '';
-      this.firstPageLabel = t['firstPage'] ?? '';
-      this.lastPageLabel = t['lastPage'] ?? '';
+    this.transloco.selectTranslateObject<PaginatorTexts>('paginator').subscribe((t) => {
+      this.itemsPerPageLabel = t.itemsPerPage ?? '';
+      this.nextPageLabel = t.nextPage ?? '';
+      this.previousPageLabel = t.previousPage ?? '';
+      this.firstPageLabel = t.firstPage ?? '';
+      this.lastPageLabel = t.lastPage ?? '';
       this.changes.next();
     });
   }

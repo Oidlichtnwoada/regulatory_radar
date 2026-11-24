@@ -205,8 +205,10 @@ const FACTORIES: Readonly<Record<LlmProviderId, (env: Env) => ProviderParts>> = 
   openai: (env) => ({
     chatModel: env.OPENAI_CHAT_MODEL,
     // No temperature: current OpenAI reasoning models do not document it; reproducibility comes from stored results.
+    // Responses API: reasoning models (e.g. gpt-6-luna) refuse function tools on /v1/chat/completions.
     chat: new ChatOpenAI({
       model: env.OPENAI_CHAT_MODEL,
+      useResponsesApi: true,
       apiKey: env.OPENAI_API_KEY,
       configuration: { baseURL: env.OPENAI_BASE_URL },
       maxRetries: 3,

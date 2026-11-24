@@ -94,6 +94,7 @@ export class ScriptedChat extends BaseChatModel {
               {
                 naceCode: 'C24',
                 naceTitle: 'Manufacture of basic metals',
+                basis: 'named',
                 verdict: 'relevant',
                 countries: null,
                 rationale: 'scripted: metals',

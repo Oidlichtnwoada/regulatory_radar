@@ -55,17 +55,23 @@ const runWorker = async (ctx: INestApplicationContext, signal: AbortSignal): Pro
 };
 
 /** Commands of the entrypoint; anything else fails instead of silently doing nothing. */
-const COMMANDS = ['migrate', 'api', 'worker', 'all', 'eval'];
+const COMMANDS = ['migrate', 'api', 'worker', 'all', 'eval', 'classify-preview'];
 
-/** Entrypoint: `migrate`, `api`, `worker`, `all` (api + worker) or `eval [--labels file ...]`. */
+/**
+ * Entrypoint: `migrate`, `api`, `worker`, `all` (api + worker), `eval [--labels file ...]` or
+ * `classify-preview GROUP_KEY ...` (what the classification agent would store now; stores nothing).
+ */
 const main = async (): Promise<void> => {
   const env = loadEnv();
   const [command = 'all', ...args] = process.argv.slice(2);
   if (!COMMANDS.includes(command))
     throw new Error(`unknown command "${command}", expected one of ${COMMANDS.join(', ')}`);
   const settings = llmSettings(env);
-  // eval prints JSON on stdout, so its notes go to stderr.
-  const note = command === 'eval' ? (m: string) => console.error(m) : (m: string) => logger.log(m, 'Config');
+  // eval and classify-preview print JSON on stdout, so their notes go to stderr.
+  const note =
+    command === 'eval' || command === 'classify-preview'
+      ? (m: string) => console.error(m)
+      : (m: string) => logger.log(m, 'Config');
   note(`mode ${settings.mode}, database ${new URL(databaseUrlFor(env)).pathname.slice(1)}`);
   settings.warnings.forEach(note);
   if (command === 'migrate') await migrate(env);
@@ -85,6 +91,13 @@ const main = async (): Promise<void> => {
       logger: ['warn', 'error'],
     });
     process.exitCode = await runEval(ctx, env, args);
+    await ctx.close();
+  }
+  if (command === 'classify-preview') {
+    const ctx = await NestFactory.createApplicationContext(workerModule(env), {
+      logger: ['warn', 'error'],
+    });
+    console.log(JSON.stringify(await ctx.get(PipelineService).previewClassification(args), null, 2));
     await ctx.close();
   }
 };

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   type CountryLabel,
   classifyDeterministic,
+  consensusLabels,
   keepTracked,
   ruleMatches,
   type SectorLabel,
@@ -78,9 +79,11 @@ describe("validation of the agent's labels", () => {
     naceTitle: string,
     verdict: SectorLabel['verdict'],
     countries: string[] | null,
+    basis: 'named' | 'speculative' = 'named',
   ) => ({
     naceCode,
     naceTitle,
+    basis,
     verdict,
     countries,
     rationale: `agent ${naceCode}`,
@@ -98,6 +101,15 @@ describe("validation of the agent's labels", () => {
     ]);
     expect(rejected.map((l) => l.naceCode)).toEqual(['G47']);
     expect(dropped).toHaveLength(2);
+  });
+
+  it('discards labels the agent marks as speculative, without counting them as invalid', () => {
+    const { kept, rejected, dropped, speculative } = validLabels(tax, 'EU', [
+      agent('C24', 'Manufacture of basic metals', 'relevant', null),
+      agent('C10', 'Manufacture of food products', 'borderline', null, 'speculative'),
+    ]);
+    expect(kept.map((l) => l.naceCode)).toEqual(['C24']);
+    expect([rejected, dropped, speculative]).toEqual([[], [], ['C10']]);
   });
 
   it('falls back to the whole scope when no given country is in it', () => {
@@ -179,5 +191,29 @@ describe('classification engine id', () => {
     expect(classificationEngine('agent:openai:x').split('@')[1]).not.toBe(
       classificationEngine('deterministic').split('@')[1],
     );
+  });
+});
+
+describe('consensus of independent classification runs', () => {
+  it('keeps a label only when every run has it, its ancestor or descendant, with the lowest verdict', () => {
+    const kept = consensusLabels([
+      [
+        label('C24', 'relevant'),
+        label('C10', 'borderline'),
+        label('G47', 'relevant'),
+        label('*', 'relevant'),
+      ],
+      [label('C24.10', 'relevant'), label('G47', 'borderline'), label('*', 'relevant')],
+    ]);
+    expect(kept.map((l) => `${l.naceCode}:${l.verdict}`)).toEqual([
+      'C24:relevant',
+      'G47:borderline',
+      '*:relevant',
+    ]);
+  });
+
+  it('does not let the horizontal code confirm a sector, and a single run is unchanged', () => {
+    expect(consensusLabels([[label('C24', 'relevant')], [label('*', 'relevant')]])).toEqual([]);
+    expect(consensusLabels([[label('C24', 'relevant')]])).toEqual([label('C24', 'relevant')]);
   });
 });

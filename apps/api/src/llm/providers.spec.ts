@@ -1,11 +1,12 @@
 import { HumanMessage } from '@langchain/core/messages';
+import { ChatOpenAI } from '@langchain/openai';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { llmSettings, loadEnv } from '../config/env.js';
 import { createAiProviders, engines } from './providers.js';
 
 describe('one ML/AI provider behind LangChain interfaces', () => {
   it.each([
-    ['mistral', { MISTRAL_API_KEY: 'k' }, 'mistral:mistral-large-4', 'mistral:mistral-embed'],
+    ['mistral', { MISTRAL_API_KEY: 'k' }, 'mistral:mistral-small-2603', 'mistral:mistral-embed'],
     ['openai', { OPENAI_API_KEY: 'k' }, 'openai:gpt-6-luna', 'openai:text-embedding-3-large'],
   ])('%s serves tool-calling chat and embeddings from one key', (provider, keys, chat, embedding) => {
     const ai = createAiProviders(loadEnv({ LLM_PROVIDER: provider, ...keys }));
@@ -24,6 +25,12 @@ describe('one ML/AI provider behind LangChain interfaces', () => {
     ['openai', { OPENAI_API_KEY: 'k', OPENAI_EMBED_MODEL: 'text-embedding-3-small' }],
   ])('refuses a %s embedding model without an indexed vector size', (provider, env) => {
     expect(() => createAiProviders(loadEnv({ LLM_PROVIDER: provider, ...env }))).toThrow(/not supported/);
+  });
+
+  it('calls OpenAI through the Responses API (reasoning models refuse tools on chat completions)', () => {
+    const chat = createAiProviders(loadEnv({ LLM_PROVIDER: 'openai', OPENAI_API_KEY: 'k' })).chat?.chat;
+    expect(chat).toBeInstanceOf(ChatOpenAI);
+    expect((chat as ChatOpenAI).useResponsesApi).toBe(true);
   });
 
   it('falls back to offline when the selected provider has no key', () => {

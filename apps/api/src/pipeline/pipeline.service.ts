@@ -7,7 +7,12 @@ import { type HeldLock, PIPELINE_LOCK_KEY, tryAdvisoryLock } from '../db/worker-
 import type { NaceTaxonomy } from '../domain/nace.js';
 import { type AiProviders, engines } from '../llm/providers.js';
 import { AI, ENV, TAXONOMY } from '../tokens.js';
-import { runClassificationStage } from './classification.stage.js';
+import {
+  type ClassificationOptions,
+  type ClassificationPreview,
+  previewClassification,
+  runClassificationStage,
+} from './classification.stage.js';
 import { runEmbeddingStage } from './embedding.stage.js';
 import { runGroupingStage } from './grouping.stage.js';
 import { runNaceEmbeddingStage } from './nace-embedding.stage.js';
@@ -35,6 +40,41 @@ export class PipelineService {
     @Inject(AI) private readonly ai: AiProviders,
     private readonly sql: AgentSqlReader,
   ) {}
+
+  /** Options shared by the agent stages (without the engine id). */
+  private agentOptions(signal?: AbortSignal): Omit<ClassificationOptions, 'engine'> {
+    const e = engines(this.ai);
+    return {
+      retryAfterSeconds: this.env.PIPELINE_RETRY_SECONDS,
+      embeddingEngine: e.embedding,
+      embeddingDimensions: this.ai.embedding?.dimensions ?? 0,
+      maxSteps: this.env.AGENT_MAX_STEPS,
+      batchSize: this.env.PIPELINE_BATCH_SIZE,
+      concurrency: this.env.LLM_CONCURRENCY,
+      internet: this.env.AGENT_INTERNET_ACCESS,
+      queryEmbeddings: this.ai.embedding?.embeddings ?? null,
+      sqlReader: this.sql.query,
+      ...(signal ? { signal } : {}),
+    };
+  }
+
+  /** What the classification agent would store for the given groups now (nothing is stored; online mode only). */
+  previewClassification(groupKeys: readonly string[]): Promise<readonly ClassificationPreview[]> {
+    const e = engines(this.ai);
+    if (!this.ai.chat || e.classification === 'deterministic')
+      return Promise.reject(new Error('classification preview needs an LLM provider (online mode)'));
+    return previewClassification(
+      this.db,
+      this.tax,
+      this.ai.chat,
+      {
+        ...this.agentOptions(),
+        engine: e.classification,
+        runs: this.env.CLASSIFICATION_AGENT_RUNS,
+      },
+      groupKeys,
+    );
+  }
 
   /**
    * Runs cycles until aborted; a busy cycle is followed immediately by the next one. Stages count only
@@ -96,24 +136,8 @@ export class PipelineService {
   async runCycle(signal?: AbortSignal): Promise<CycleStats> {
     const startedAt = new Date();
     const e = engines(this.ai);
-    const {
-      PIPELINE_BATCH_SIZE: batchSize,
-      LLM_CONCURRENCY: concurrency,
-      AGENT_MAX_STEPS: maxSteps,
-    } = this.env;
-    const retryAfterSeconds = this.env.PIPELINE_RETRY_SECONDS;
-    const agent = {
-      retryAfterSeconds,
-      embeddingEngine: e.embedding,
-      embeddingDimensions: this.ai.embedding?.dimensions ?? 0,
-      maxSteps,
-      batchSize,
-      concurrency,
-      internet: this.env.AGENT_INTERNET_ACCESS,
-      queryEmbeddings: this.ai.embedding?.embeddings ?? null,
-      sqlReader: this.sql.query,
-      ...(signal ? { signal } : {}),
-    };
+    const agent = this.agentOptions(signal);
+    const { batchSize, concurrency, retryAfterSeconds } = agent;
     const failed: string[] = [];
     const stage = (name: string, run: () => Promise<number>): Promise<number> =>
       signal?.aborted
@@ -149,7 +173,11 @@ export class PipelineService {
     );
     const classifyChat = e.classification === 'deterministic' ? null : this.ai.chat;
     const classification = await stage('classification', () =>
-      runClassificationStage(this.db, this.tax, classifyChat, { ...agent, engine: e.classification }),
+      runClassificationStage(this.db, this.tax, classifyChat, {
+        ...agent,
+        engine: e.classification,
+        runs: this.env.CLASSIFICATION_AGENT_RUNS,
+      }),
     );
     const stats = { translation, embedding, naceEmbedding, grouping, classification };
     if (Object.values(stats).some((n) => n > 0)) {

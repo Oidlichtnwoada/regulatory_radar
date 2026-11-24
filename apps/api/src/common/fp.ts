@@ -19,6 +19,12 @@ export const hashOf = (value: unknown): string =>
 export const uniqBy = <T>(items: readonly T[], key: (item: T) => string): readonly T[] =>
   [...new Map(items.map((item) => [key(item), item] as const).reverse()).values()].reverse();
 
+/** Consecutive slices of at most `size` items (the last may be shorter); none for an empty list. */
+export const chunksOf = <T>(items: readonly T[], size: number): readonly (readonly T[])[] =>
+  Array.from({ length: Math.ceil(items.length / Math.max(1, size)) }, (_, i) =>
+    items.slice(i * size, (i + 1) * size),
+  );
+
 /** Stable comparison helper for sort(): compares by a list of key extractors in order. */
 export const compareBy =
   <T>(...keys: readonly ((item: T) => string | number)[]) =>

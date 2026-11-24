@@ -30,3 +30,6 @@ Thumbs.db
 .pgdata-eval/
 # Partial output of a failed scripts/eval.sh run
 docs/eval/*.tmp
+
+# Local logs (docker compose and command output)
+.logs/

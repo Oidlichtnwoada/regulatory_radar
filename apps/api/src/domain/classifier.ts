@@ -56,6 +56,26 @@ export interface ClassifierInput {
 /** Numeric strength of a verdict. */
 export const verdictRank = (v: Verdict): number => VERDICTS.indexOf(v);
 
+/**
+ * Consensus of independent classification runs of one group: a label of the first run is kept only when every other
+ * run has a label on the same code, an ancestor or a descendant (the horizontal code only matches itself), and it gets
+ * the lowest verdict among the runs (the best match per run). Damps run-to-run variance of a model: a sector only
+ * one run names, or calls relevant, does not decide the result alone. Pure.
+ */
+export const consensusLabels = (runs: readonly (readonly SectorLabel[])[]): readonly SectorLabel[] => {
+  const [first = [], ...others] = runs;
+  const related = (a: string, b: string) =>
+    a === b ||
+    (a !== HORIZONTAL && b !== HORIZONTAL && (naceLineage(a).includes(b) || naceLineage(b).includes(a)));
+  return first.flatMap((l) => {
+    const best = others.map((run) =>
+      Math.max(-1, ...run.filter((o) => related(l.naceCode, o.naceCode)).map((o) => verdictRank(o.verdict))),
+    );
+    const rank = Math.min(verdictRank(l.verdict), ...best);
+    return rank <= 0 ? [] : [{ ...l, verdict: VERDICTS[rank] ?? l.verdict }];
+  });
+};
+
 /** Expands sector labels to country labels (EU -> all member states) and keeps the strongest per pair. */
 export const expandLabels = (
   jurisdiction: string,

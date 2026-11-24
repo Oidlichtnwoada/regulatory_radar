@@ -7,6 +7,7 @@ import { PrismaService } from '../db/prisma.service.js';
 import { type EvalLabels, evaluate, evaluateGrouping, evaluateTiers, fBeta } from '../domain/eval.js';
 import type { ProfilePreset } from '../domain/presets.js';
 import { engines } from '../llm/providers.js';
+import { CLASSIFICATION_FAILED_PREFIX, GROUPING_FAILED_PREFIX } from '../pipeline/repository.js';
 import { queryRadar, type RadarEntry } from '../radar/queries.js';
 import { pipelineStatus } from '../radar/status.js';
 import { AI, PRESETS, TAXONOMY } from '../tokens.js';
@@ -22,20 +23,49 @@ type Profile = {
 const option = (args: readonly string[], name: string): readonly string[] =>
   args.flatMap((a, i) => (a === `--${name}` && args[i + 1] ? [args[i + 1] ?? ''] : []));
 
-/** Waits until every stage has caught up (nothing pending, every group classified, stable twice). */
+/**
+ * Current results that come from a failed agent run: current groups whose latest grouping decision failed and
+ * groups classified by the deterministic fallback. Both are retried by the worker; scores taken while any is left
+ * measure the fallback, not the agent.
+ */
+const agentFailures = async (
+  db: PrismaService,
+  groupingEngine: string,
+): Promise<{ readonly grouping: number; readonly classification: number }> => {
+  const [r] = await db.$queryRaw<{ grouping: bigint; classification: bigint }[]>`
+    WITH latest AS (
+      -- Per current group, the newest decision about any member (any version of it): a failure stored for an item
+      -- that later became a non-representative member is superseded by its group's newer review.
+      SELECT DISTINCT ON (g.group_key) l.rationale
+      FROM radar_group_current g
+      JOIN finding m ON m.id = ANY (g.member_ids)
+      JOIN finding f ON f.source_id = m.source_id AND f.external_id = m.external_id
+      JOIN group_link l ON l.finding_id = f.id AND l.engine = ${groupingEngine}
+      ORDER BY g.group_key, l.created_at DESC, l.id DESC)
+    SELECT (SELECT count(*) FROM latest WHERE starts_with(rationale, ${GROUPING_FAILED_PREFIX})) AS grouping,
+           (SELECT count(*) FROM radar_group_current
+            WHERE starts_with(why_relevant, ${CLASSIFICATION_FAILED_PREFIX})) AS classification`;
+  return { grouping: Number(r?.grouping ?? 0), classification: Number(r?.classification ?? 0) };
+};
+
+/** Waits until every stage has caught up (nothing pending, every group classified, no agent failure left, stable twice). */
 const waitForPipeline = async (ctx: INestApplicationContext, timeoutSeconds: number): Promise<boolean> => {
   const db = ctx.get(PrismaService);
   const ai = ctx.get(AI);
   const deadline = Date.now() + timeoutSeconds * 1000;
   const idle = async () => {
     const s = await pipelineStatus(db, ai, ctx.get(TAXONOMY));
+    const failures = ai.chat
+      ? await agentFailures(db, s.engines.grouping)
+      : { grouping: 0, classification: 0 };
     return (
       s.findings > 0 &&
       s.translations.pending === 0 &&
       s.embeddings.pending === 0 &&
       (ai.embedding === null || s.naceEmbeddings.embedded === s.naceEmbeddings.total) &&
       s.groups > 0 &&
-      s.classifiedGroups === s.groups
+      s.classifiedGroups === s.groups &&
+      failures.grouping + failures.classification === 0
     );
   };
   while (Date.now() < deadline) {
@@ -170,8 +200,16 @@ export const runEval = async (
       };
     }),
   );
-  console.log(JSON.stringify({ engines: engines(ctx.get(AI)), pipelineCaughtUp: ready, results }, null, 2));
+  const e = engines(ctx.get(AI));
+  const failures = await agentFailures(db, e.grouping);
+  console.log(
+    JSON.stringify({ engines: e, pipelineCaughtUp: ready, agentFailures: failures, results }, null, 2),
+  );
   if (!ready) console.error(`pipeline did not catch up within ${waitSeconds} s; scores are incomplete`);
+  if (failures.grouping + failures.classification > 0)
+    console.error(
+      `agent failures left: grouping ${failures.grouping}, classification ${failures.classification} (scored on the fallback)`,
+    );
   console.error(summaryLines(results).join('\n'));
   return ready ? 0 : 2;
 };

@@ -1,9 +1,14 @@
+import { Logger } from '@nestjs/common';
 import { z } from 'zod';
 import { errorMessage, mapLimit } from '../common/fp.js';
 import type { PrismaService } from '../db/prisma.service.js';
 import type { GroupMember } from '../domain/grouping.js';
 import type { ChatProvider } from '../llm/providers.js';
+import { warnFailures } from './failures.js';
 import { pendingFor } from './repository.js';
+
+/** Logger of the stage. */
+const log = new Logger('Translation');
 
 /** English title, required in every translation. */
 const titleEn = z.string().min(1).describe('Faithful English translation of the title');
@@ -68,6 +73,13 @@ export const runTranslationStage = async (
       };
     }
   });
+  warnFailures(
+    log,
+    'translations',
+    rows.length,
+    rows.flatMap((r) => ('error' in r && r.error ? [r.error] : [])),
+    'retried later',
+  );
   // skipDuplicates: another worker may have stored the same result meanwhile (partial unique index).
   await db.translation.createMany({ data: [...rows], skipDuplicates: true });
   return rows.filter((r) => r.status !== 'failed').length;

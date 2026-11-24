@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { hashOf } from '../common/fp.js';
+import { chunksOf, hashOf } from '../common/fp.js';
 import type { PrismaService } from '../db/prisma.service.js';
 import { type NaceTaxonomy, naceDocument } from '../domain/nace.js';
 import type { EmbeddingProvider } from '../llm/providers.js';
@@ -10,6 +10,9 @@ const log = new Logger('NaceEmbedding');
 
 /** Codes per embedding request. */
 const CHUNK = 64;
+
+/** Rows per INSERT statement (keeps each statement well below the slow-query threshold for 3072-dim vectors). */
+const INSERT_ROWS = 16;
 
 /** A NACE code's embedding input and its content hash. */
 interface NaceDoc {
@@ -47,11 +50,8 @@ export const runNaceEmbeddingStage = async (
       return { code: n.code, text, hash: hashOf(text) };
     })
     .filter((d) => !done.has(`${d.code}|${d.hash}`));
-  const chunks = Array.from({ length: Math.ceil(pending.length / CHUNK) }, (_, i) =>
-    pending.slice(i * CHUNK, (i + 1) * CHUNK),
-  );
   // Sequential requests (rate limits); the running count stays inside this reduce.
-  return chunks.reduce<Promise<number>>(async (previous, chunk) => {
+  return chunksOf(pending, CHUNK).reduce<Promise<number>>(async (previous, chunk) => {
     const embedded = await previous;
     const inputs = await Promise.all(chunk.map((d) => fitEmbeddingInput(d.text, provider, null)));
     const results = await embedAll(
@@ -71,14 +71,17 @@ export const runNaceEmbeddingStage = async (
       const first = results.find((r): r is { readonly error: string } => 'error' in r);
       log.warn(`${failed.length} codes not embedded, retried next cycle: ${first?.error ?? 'unknown error'}`);
     }
-    if (ok.length === 0) return embedded;
-    await db.$executeRaw`
-      INSERT INTO nace_embedding (code, engine, content_hash, dims, vector, compacted)
-      SELECT u.code, ${opts.engine}::text, u.hash, ${provider.dimensions}::int, u.vec::vector, u.compacted
-      FROM unnest(${ok.map((d) => d.code)}::text[], ${ok.map((d) => d.hash)}::text[],
-                  ${ok.map((d) => `[${d.vector.join(',')}]`)}::text[], ${ok.map((d) => d.compacted)}::boolean[])
-        AS u(code, hash, vec, compacted)
-      ON CONFLICT (engine, code, content_hash) DO NOTHING`;
+    // Small statements: each row is a large vector parsed from text and inserted into an HNSW index.
+    await chunksOf(ok, INSERT_ROWS).reduce<Promise<unknown>>(async (written, rows) => {
+      await written;
+      return db.$executeRaw`
+        INSERT INTO nace_embedding (code, engine, content_hash, dims, vector, compacted)
+        SELECT u.code, ${opts.engine}::text, u.hash, ${provider.dimensions}::int, u.vec::vector, u.compacted
+        FROM unnest(${rows.map((d) => d.code)}::text[], ${rows.map((d) => d.hash)}::text[],
+                    ${rows.map((d) => `[${d.vector.join(',')}]`)}::text[], ${rows.map((d) => d.compacted)}::boolean[])
+          AS u(code, hash, vec, compacted)
+        ON CONFLICT (engine, code, content_hash) DO NOTHING`;
+    }, Promise.resolve());
     return embedded + ok.length;
   }, Promise.resolve(0));
 };

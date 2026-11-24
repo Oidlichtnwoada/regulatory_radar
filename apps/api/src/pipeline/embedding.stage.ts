@@ -4,6 +4,7 @@ import { errorMessage, mapLimit } from '../common/fp.js';
 import type { PrismaService } from '../db/prisma.service.js';
 import type { GroupMember } from '../domain/grouping.js';
 import type { ChatProvider, EmbeddingProvider } from '../llm/providers.js';
+import { warnFailures } from './failures.js';
 import { pendingFor } from './repository.js';
 
 /** Text that is embedded: English when available, otherwise the original (the model is multilingual). */
@@ -157,6 +158,13 @@ export const runEmbeddingStage = async (
       error: r && 'error' in r ? r.error.slice(0, 1000) : null,
     };
   });
+  warnFailures(
+    log,
+    'embeddings',
+    rows.length,
+    rows.flatMap((r) => (r.error ? [r.error] : [])),
+    'retried later',
+  );
   // ON CONFLICT: another worker may have stored the same result meanwhile (partial unique index).
   await db.$executeRaw`
     INSERT INTO embedding (id, finding_id, engine, status, dims, vector, compacted, error)

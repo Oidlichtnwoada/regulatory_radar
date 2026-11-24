@@ -353,6 +353,17 @@ export const pendingClassifications = async (
       AND ${retryDue(Prisma.sql`c.failures`, Prisma.sql`c.last_failure`, opts.retryAfterSeconds)}
     ORDER BY s.latest_published DESC, s.group_key LIMIT ${opts.limit}`;
 
+/** Latest non-retired snapshots of the given groups (classification previews). */
+export const currentSnapshots = async (
+  db: PrismaService,
+  groupKeys: readonly string[],
+): Promise<readonly PendingSnapshot[]> =>
+  db.$queryRaw<PendingSnapshot[]>`
+    SELECT s.id, s.group_key, s.jurisdiction, s.member_ids FROM (
+      SELECT DISTINCT ON (group_key) * FROM group_snapshot WHERE group_key = ANY (${[...groupKeys]}::text[])
+      ORDER BY group_key, created_at DESC, id DESC) s
+    WHERE NOT s.retired ORDER BY s.group_key`;
+
 /** When each current finding was stored (to tell whether new evidence arrived after a decision). */
 export const findingTimes = async (db: PrismaService): Promise<ReadonlyMap<string, Date>> =>
   new Map(
@@ -383,12 +394,14 @@ export const findingsMentioning = async (
  * Already classified current groups that contain one of the findings, with their labels (precedents). Groups that
  * share a member with the group being classified (`ownMemberIds`, e.g. its own earlier snapshot under another key
  * before the read models are refreshed after a merge) are left out, so the agent never copies its own old verdict.
+ * Only results of the current engine version count (not older rules or prompts, not fallbacks of failed runs).
  */
 export const classifiedGroupsContaining = async (
   db: PrismaService,
   findingIds: readonly string[],
   excludeKey: string,
-  ownMemberIds: readonly string[] = [],
+  ownMemberIds: readonly string[],
+  engine: string,
 ): Promise<
   readonly {
     readonly group_key: string;
@@ -408,7 +421,8 @@ export const classifiedGroupsContaining = async (
         FROM radar_group_current g
         WHERE g.member_ids && ${[...findingIds]}::uuid[] AND g.group_key <> ${excludeKey}
           AND NOT g.member_ids && ${[...ownMemberIds]}::uuid[]
-          AND g.classification_id IS NOT NULL`;
+          AND g.classification_id IS NOT NULL AND g.classification_engine = ${engine}
+          AND NOT starts_with(g.why_relevant, ${CLASSIFICATION_FAILED_PREFIX})`;
 
 /**
  * NACE codes closest to a query vector (semantic code search over title + explanatory notes). Only the latest

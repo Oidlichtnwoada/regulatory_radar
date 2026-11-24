@@ -26,14 +26,16 @@ services:
       POSTGRES_USER: radar
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-radar}
       POSTGRES_DB: radar
+      # Password (scram) also on the container's local socket, not "trust" (applies when the data directory is created).
+      POSTGRES_INITDB_ARGS: --auth-local=scram-sha-256 --auth-host=scram-sha-256
+    # Logs slow statements, DDL, warnings and errors. No connection or checkpoint lines: the health check alone would
+    # log three lines every 2 s.
     command:
       - postgres
       - -c
       - log_min_duration_statement=250
       - -c
-      - log_connections=on
-      - -c
-      - log_disconnections=on
+      - log_checkpoints=off
       - -c
       - log_statement=ddl
       - -c
