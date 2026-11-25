@@ -4,11 +4,11 @@ Both sets label the same corpus (`data/items.json`, as of 2026-11-16). The exten
 
 - **Labelling:** three model annotators labelled all 53 items for all three profiles independently (159 item labels). None of them saw `labels.json`.
 - **Vote:** the final label is the majority vote.
-- **Review:** a fourth, sceptical reviewer re-checked every label and group and changed nothing.
+- **Review:** a fourth, sceptical reviewer rechecked every label and group and changed nothing.
 
-**Procedure groups:** the 8 multi-item groups are identical in both sets, so both label the same 45 groups per profile.
+**Procedure groups:** the 8 multiple item groups are identical in both sets, so both label the same 45 groups per profile.
 
-**Labels:** for `metals_at` and `retail_es`, the sets disagree on 4 of 90 group labels (45 groups × 2 profiles). All three original annotators agreed on each of the four. A later blind re-annotation (three more annotators, different models) chose the extended label in all four cases (unanimously for three, 2 of 3 for `EU-LEX-0004`).
+**Labels:** for `metals_at` and `retail_es`, the sets disagree on 4 of 90 group labels (45 groups × 2 profiles). All three original annotators agreed on each of the four. A later blind reannotation (three more annotators, different models) chose the extended label in all four cases (unanimously for three, 2 of 3 for `EU-LEX-0004`).
 
 | Profile   | Group         | Item                                                                       | `labels.json` | Extended   |
 | --------- | ------------- | -------------------------------------------------------------------------- | ------------- | ---------- |
@@ -42,7 +42,7 @@ Both sets label the same corpus (`data/items.json`, as of 2026-11-16). The exten
 **`ES-BOE-0050`: borderline → relevant.**
 
 - **Funding for members:** these are Spanish aid vouchers for small and micro enterprises, covering invoicing, online sales and cybersecurity.
-- **Fits the profile:** the profile names "shops and online stores", and the vouchers cover online sales. We assume many of the members are small or micro shops; the profile does not say so.
+- **Fits the profile:** the profile names "shops and online stores", and the vouchers cover online sales. We assume many of the members are small or micro shops. The profile does not say so.
 - **Verdict:** an adopted call for funding the members can claim is something the desk should pass on, so it is relevant. The standard set's borderline is defensible because the vouchers are not aimed at retail.
 
 ## Effect on the metrics
@@ -53,9 +53,9 @@ The disagreements still matter. A classifier that follows the extended view and 
 
 The offline classifier follows the extended set exactly (tier agreement 1.00 on all three profiles). On `labels.json` that costs strict recall for `metals_at` (12/14: `EU-LEX-0004` and `EU-CON-0007` are rated borderline, so they are still shown), while `EU-EP-0034` and `ES-BOE-0050` are rated relevant where the standard set says borderline, which is not scored. See the README for the full table.
 
-## Re-annotation check (2026-11-24)
+## Reannotation check (2026-11-24)
 
-The blind re-annotation matched the extended set's majority label everywhere except two places. Neither conflicts with `labels.json`, and no label was changed:
+The blind reannotation matched the extended set's majority label everywhere except two places. Neither conflicts with `labels.json`, and no label was changed:
 
-- **`agrifood_pl` `EU-EP-0001`** (emissions-trading benchmarks): extended says borderline, all three re-annotators said not_relevant. Only a few large food installations are in emissions trading, so both are defensible; borderline is not scored.
-- **`metals_at` `DE-GAZ-0021` and `EU-TRIS-0042`** (German drafts on recycled steel and aluminium content): both sets say not_relevant because the jurisdiction is DE, and two of three re-annotators said borderline (export market, TRIS standstill as a comment window). We keep the jurisdiction rule the standard set also applies.
+- **`agrifood_pl` `EU-EP-0001`** (emissions-trading benchmarks): extended says borderline, all three reannotators said not_relevant. Only a few large food installations are in emissions trading, so both are defensible. Borderline is not scored.
+- **`metals_at` `DE-GAZ-0021` and `EU-TRIS-0042`** (German drafts on recycled steel and aluminium content): both sets say not_relevant because the jurisdiction is DE, and two of three reannotators said borderline (export market, TRIS standstill as a comment window). We keep the jurisdiction rule the standard set also applies.

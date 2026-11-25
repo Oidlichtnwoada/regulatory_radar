@@ -12,10 +12,10 @@ docker compose run --rm eval       # recall/precision per profile against both e
 
 - **Offline (default):** no key, no network, seed file only.
 - **Online:** copy `.env.example` to `.env` and set `LLM_PROVIDER=mistral` + `MISTRAL_API_KEY` or `LLM_PROVIDER=openai` + `OPENAI_API_KEY`. One provider serves chat (tool calling), multilingual embeddings and web search. `MISTRAL_SERVER_URL=https://api.eu.mistral.ai` keeps inference in the EU, but without web search.
-- **Live sources:** `SOURCE_EURLEX_ENABLED=true`, `SOURCE_BOE_ENABLED=true`; `SOURCE_FILE_ENABLED=false` drops the seed file (use an empty `POSTGRES_DATA_DIR`, since the database is append-only).
+- **Live sources:** `SOURCE_EURLEX_ENABLED=true`, `SOURCE_BOE_ENABLED=true`. `SOURCE_FILE_ENABLED=false` drops the seed file (use an empty `POSTGRES_DATA_DIR`, since the database is append-only).
 - **State:** Postgres only, one database per mode (`radar_offline`, `radar_online`) in `./.pgdata`. `docker compose down && up` keeps everything.
 - **Presets:** one click selects an example profile (Metals · Austria, Retail · Spain, Agri-food · Poland), mapped from NACE Rev. 2 to Rev. 2.1 ([mapping notes](docs/nace-rev2-to-rev2.1.md)).
-- **Develop in the dev container** (`.devcontainer/`), so a compromised npm package cannot reach your home directory; npm 12 `allowScripts` only runs approved install scripts.
+- **Develop in the dev container** (`.devcontainer/`), so a compromised npm package cannot reach your home directory. With npm 12, `allowScripts` only runs approved install scripts.
 
 ## Architecture
 
@@ -40,27 +40,27 @@ flowchart TB
 
 ## Pipeline
 
-Ingestion streams new records; stages 2–5 run in a loop (`PIPELINE_INTERVAL_SECONDS`), each picking up what is pending in Postgres, so the worker is stateless and restart-safe. Every result row stores its engine id (`deterministic`, `mistral:…`, `agent:openai:…`), and the read models are refreshed after each cycle.
+Ingestion streams new records. Stages 2 to 5 run in a loop (`PIPELINE_INTERVAL_SECONDS`), each picking up what is pending in Postgres, so the worker is stateless and restart-safe. Every result row stores its engine id (`deterministic`, `mistral:…`, `agent:openai:…`), and the read models are refreshed after each cycle.
 
 | Stage           | What it does                                                                                                                                                                                                                                                                                                    | Offline                                    |
 | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| **1 Ingest**    | Streams each source from its watermark (a day; EUR-Lex re-scans 7 days). Stores the payload verbatim (SHA-256 dedup), then normalises it: ISO country and language, NACE Rev. 2 tags → Rev. 2.1, reference key, action points (deadlines, votes, adoption). Invalid records stay raw, listed as rejected.       | same                                       |
+| **1 Ingest**    | Streams each source from its watermark (a day, EUR-Lex rescans 7 days). Stores the payload verbatim (SHA-256 dedup), then normalises it: ISO country and language, NACE Rev. 2 tags → Rev. 2.1, reference key, action points (deadlines, votes, adoption). Invalid records stay raw, listed as rejected.        | same                                       |
 | **2 Translate** | Title and summary to English; originals kept.                                                                                                                                                                                                                                                                   | skipped                                    |
 | **3 Embed**     | Multilingual embeddings (1024 or 3072 dims, pgvector HNSW); texts over 8,192 tokens are compacted once. The NACE taxonomy is embedded once per model.                                                                                                                                                           | skipped                                    |
 | **4 Group**     | Shared `ref` or `related_to` (reactions) always merge (union-find). An agent reviews every group and may join it with another group of the same jurisdiction, only with high confidence. A group is named after its first streamed item, so names are stable.                                                   | refs only                                  |
-| **5 Classify**  | Labels per (country × NACE code): `relevant`, `borderline`, `not_relevant`, each with a rationale, plus a "why relevant". EU items expand to all 27 member states. Stated tags are always relevant; a label that was relevant once **stays tracked**. Online: 2 agent runs, a third on a tie, majority decides. | multilingual concept lexicon + stated tags |
+| **5 Classify**  | Labels per (country × NACE code): `relevant`, `borderline`, `not_relevant`, each with a rationale, plus a "why relevant". EU items expand to all 27 member states. Stated tags are always relevant. A label that was relevant once **stays tracked**. Online: 2 agent runs, a third on a tie, majority decides. | multilingual concept lexicon + stated tags |
 
 **The agents** (LangGraph ReAct loop, max. 12 steps, 4 tool calls per turn):
 
-- **Tools:** embedding neighbours, Postgres full-text search, read-only SQL (SELECT-only role, 5 s timeout), the provider's `web_search`, `fetch_url`; the classifier also gets `search_nace` (words + semantic search over Eurostat notes) and `nace_notes`.
+- **Tools:** embedding neighbours, Postgres full-text search, read-only SQL (SELECT-only role, 5 s timeout), the provider's `web_search`, `fetch_url`. The classifier also gets `search_nace` (words + semantic search over Eurostat notes) and `nace_notes`.
 - **Instructions:** grouping: what is and is not the same procedure, with worked examples. Classification: who carries the obligation along the value chain, size thresholds, information-only caps, keyword traps.
-- **Checked in code:** final answers are validated against their schema; unknown NACE codes and wrong titles go back for correction (max. 2 rounds). Sectors the rules flag but the agent skipped are added as borderline. A failed run is retried after 1, then 5 minutes (3 attempts); meanwhile the deterministic result is shown.
+- **Checked in code:** final answers are validated against their schema. Unknown NACE codes and wrong titles go back for correction (max. 2 rounds). Sectors the rules flag but the agent skipped are added as borderline. A failed run is retried after 1, then 5 minutes (3 attempts). Meanwhile the deterministic result is shown.
 
 ## Ranking: how the list is ordered
 
-The UI shows the API's order unchanged. One immutable SQL function, `radar_actionability(action_points, stage, as_of)`, assigns each procedure group a tier; the query then sorts by:
+The UI shows the API's order unchanged. One immutable SQL function, `radar_actionability(action_points, stage, as_of)`, assigns each procedure group a tier. The query then sorts by:
 
-1. **Tier**: ① open consultation or feedback window → ② upcoming vote or amendment deadline → ③ standstill period → ④ in procedure → ⑤ adopted → ⑥ information only. Tiers ①–③ need a date on or after `as_of` (today, or `RADAR_AS_OF`); an expired deadline drops to the stage tier.
+1. **Tier**: ① open consultation or feedback window → ② upcoming vote or amendment deadline → ③ standstill period → ④ in procedure → ⑤ adopted → ⑥ information only. Tiers ① to ③ need a date on or after `as_of` (today, or `RADAR_AS_OF`). An expired deadline drops to the stage tier.
 2. **Action date**, soonest first (none last).
 3. **Verdict**: relevant before borderline.
 4. **Latest publication**, newest first.
@@ -72,8 +72,8 @@ The default view shows relevant + borderline for the selected country (plus EU l
 
 - **Labels are profile-independent:** one row per (group × country × NACE code). EU groups get all 27 countries, national groups only their own.
 - **Country:** EU-level groups plus groups of the selected countries.
-- **NACE:** codes are `ltree` paths (`C24.4` → `NACE.C.C24.C24_4`). `C24` matches `NACE.C.C24.*` (itself and below), `NACE.C` (section) and `NACE` (all sectors); never siblings like `C25`. The strongest matching verdict wins.
-- **Fast reads:** the UI never reads the append-only tables. Materialized views (latest group snapshot, its labels) are refreshed concurrently after each pipeline cycle; a GiST index on `(country, nace_path)` answers the match, and one SQL query does scope → match → rank → page, including the denominator.
+- **NACE:** codes are `ltree` paths (`C24.4` → `NACE.C.C24.C24_4`). `C24` matches `NACE.C.C24.*` (itself and below), `NACE.C` (section) and `NACE` (all sectors). Never siblings like `C25`. The strongest matching verdict wins.
+- **Fast reads:** the UI never reads the append-only tables. Materialized views (latest group snapshot, its labels) are refreshed concurrently after each pipeline cycle. A GiST index on `(country, nace_path)` answers the match, and one SQL query does scope → match → rank → page, including the denominator.
 
 ## Evaluation
 
@@ -83,8 +83,8 @@ scripts/eval.sh offline        # same on a fresh stack; writes docs/eval/offline
 scripts/eval.sh online         # fresh stack with the provider from .env
 ```
 
-- **Two label sets, same 53 items:** [`labels.json`](data/eval/labels.json) (standard, unchanged; `metals_at`, `retail_es`) and [`labels.extended.json`](data/eval/labels.extended.json) (ours, all three profiles: three independent model annotators, majority vote, 158/159 agreement, then a sceptical reviewer). The 4 of 90 labels where they differ are argued in [`disagreements.md`](data/eval/disagreements.md).
-- **Shown** = relevant + borderline (the default view); **strict** = relevant only; **tier agreement** = exact tier, borderline included. Profiles are scored with their Rev. 2.1 selections.
+- **Two label sets, same 53 items:** [`labels.json`](data/eval/labels.json) (standard, unchanged, `metals_at`, `retail_es`) and [`labels.extended.json`](data/eval/labels.extended.json) (ours, all three profiles: three independent model annotators, majority vote, 158/159 agreement, then a sceptical reviewer). The 4 of 90 labels where they differ are argued in [`disagreements.md`](data/eval/disagreements.md).
+- **Shown** = relevant + borderline (the default view). **strict** = relevant only. **tier agreement** = exact tier, borderline included. Profiles are scored with their Rev. 2.1 selections.
 - **Also checked:** F2, grouping pair precision/recall and group names, jurisdiction leaks, "why relevant" coverage, ranking determinism, tier order.
 
 | Offline (deterministic)              | Recall | Precision | F2   | Strict P/R  | Tier agreement | Grouping P/R |
@@ -109,7 +109,7 @@ The two online runs used different prompt versions, so they are not a model comp
 **What moved the numbers most:**
 
 1. **Offline:** exclusions per concept instead of global ("industrial consumers" hid the energy-intensive signal for metals), and capping at borderline for information-only items, rules without duties and concepts touching a minority of a sector.
-2. **Online:** the OpenAI Responses API (Chat Completions refused tools: every run fell back), then majority consensus over 2–3 agent runs against run-to-run variance, then general value-chain rules in the prompt.
+2. **Online:** the OpenAI Responses API (Chat Completions refused tools: every run fell back), then majority consensus over 2 or 3 agent runs against run-to-run variance, then general value-chain rules in the prompt.
 
 ## Tests
 
@@ -122,19 +122,19 @@ The two online runs used different prompt versions, so they are not a model comp
 
 ## Decision log
 
-1. **Postgres is the only state, append-only.** New rows supersede old ones; materialized views give the current state. Auditability and "new since" for free.
-2. **Recall over precision.** Default view = relevant + borderline; an LLM can add and rank, never silently remove (stays tracked).
-3. **Relevance is profile-independent.** Labels per (country × NACE path) in `ltree`; the operator's profile never reaches an LLM.
-4. **Deterministic core, LLM at the edges.** Ingestion, ref grouping and ranking are pure; agent results are stored with their engine id and reused, so output is reproducible.
-5. **One provider, two databases.** Mistral or OpenAI behind LangChain interfaces; offline and online results never mix.
-6. **Live sources EUR-Lex CELLAR and BOE:** official, keyless, date-addressable, so the watermark is a day; a failed day keeps it back and marks the source `degraded`.
-7. **NACE Rev. 2.1 only;** Rev. 2 is mapped once at the edge with Eurostat's correspondence (a little broader by design).
-8. **My steering decisions:** NACE Rev. 2.1 instead of Rev. 2; OpenAPI as the single contract (client, validation, MCP); separate databases per mode; an extended eval set built blind and the standard set left untouched; the switch to OpenAI's Responses API; majority consensus over several agent runs; only general prompt rules, never item-specific fixes.
-9. **Left rough:** no auth/TLS; the offline lexicon is tuned to the seed; EUR-Lex gives titles only (no consultation deadlines; the Have-your-say API would add them); one online run per provider.
+1. **Postgres is the only state, append-only.** New rows supersede old ones. Materialized views give the current state. Auditability and "new since" for free.
+2. **Recall over precision.** Default view = relevant + borderline. An LLM can add and rank, never silently remove (stays tracked).
+3. **Relevance is profile-independent.** Labels per (country × NACE path) in `ltree`. The operator's profile never reaches an LLM.
+4. **Deterministic core, LLM at the edges.** Ingestion, ref grouping and ranking are pure. Agent results are stored with their engine id and reused, so output is reproducible.
+5. **One provider, two databases.** Mistral or OpenAI behind LangChain interfaces. Offline and online results never mix.
+6. **Live sources EUR-Lex CELLAR and BOE:** official, keyless, date-addressable, so the watermark is a day. A failed day keeps it back and marks the source `degraded`.
+7. **NACE Rev. 2.1 only.** Rev. 2 is mapped once at the edge with Eurostat's correspondence (a little broader by design).
+8. **My steering decisions:** NACE Rev. 2.1 instead of Rev. 2. OpenAPI as the single contract (client, validation, MCP). Separate databases per mode. An extended eval set built blind and the standard set left untouched. The switch to OpenAI's Responses API. Majority consensus over several agent runs. Only general prompt rules, never item-specific fixes.
+9. **Left rough:** no auth/TLS. The offline lexicon is tuned to the seed. EUR-Lex gives titles only (no consultation deadlines, the Have-your-say API would add them). One online run per provider.
 
 Key prompts and where I steered: [docs/agent-log.md](docs/agent-log.md).
 
-## Self-report
+## Self report
 
 Time invested: **8 hours**, with Claude Code as the coding agent.
 

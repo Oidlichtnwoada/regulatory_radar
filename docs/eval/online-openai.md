@@ -34,16 +34,16 @@ leaks, 100 % "why relevant" coverage, every procedure group reproduced exactly, 
 
 **The extended set is not yet at 100 % in a complete run.** One tier is off: `AT-PAR-0016` (Austrian draft on scrap
 shipment records) is borderline for `metals_at`, labelled relevant. The rule added for it afterwards (below, last
-row) was confirmed in a targeted check, but the complete re-run is still outstanding.
+row) was confirmed in a targeted check, but the complete rerun is still outstanding.
 
 On `labels.json` the differences are the documented disagreements between the two label sets
 ([`disagreements.md`](../../data/eval/disagreements.md)) plus `AT-PAR-0016`.
 
 ## How the score developed
 
-Every change is a general rule, schema field or mechanism; none refers to an item, a group id or a profile of the
+Every change is a general rule, schema field or mechanism. None refers to an item, a group id or a profile of the
 eval sets, and no label was changed. Fixes were checked first with `classify-preview` on the affected groups (a dry
-run that stores nothing), and only then with a full re-classification.
+run that stores nothing), and only then with a full reclassification.
 
 | Run                         | Change                                                                                                                              | Extended set, tiers off |
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
@@ -57,17 +57,17 @@ run that stores nothing), and only then with a full re-classification.
 | 8 (fresh, table above)      | Majority consensus: a third run breaks ties; `*` confirms specific codes                                                           | 1                       |
 | next                        | Documentation duties on whoever ships or receives a material make those sectors relevant                                          | pending                 |
 
-Runs 2 to 6 re-classified the groups of a persistent database; runs 7 and 8 ran every stage from scratch.
+Runs 2 to 6 reclassified the groups of a persistent database. Runs 7 and 8 ran every stage from scratch.
 
 What the runs showed:
 
 - **Run-to-run variance is the main obstacle.** Single runs of the agent flipped one or two borderline/relevant calls
   between otherwise identical runs, so a prompt rule that fixed a group in a dry run could miss in the next full run.
-  The majority consensus (`CLASSIFICATION_AGENT_RUNS`) damps this; its cost is two agent runs per group, three where
+  The majority consensus (`CLASSIFICATION_AGENT_RUNS`) damps this. Its cost is two agent runs per group, three where
   the first two disagree.
 - **Real-world knowledge can disagree with synthetic labels.** For `EU-HYS-0038` (indirect emission cost aid) the
   agent found the actual 2026 amendment of the ETS State aid guidelines, which lists oils and fats, and labelled food
-  borderline; the label says not relevant. The fix was not to forbid that knowledge, but a general provenance rule:
+  borderline. The label says not relevant. The fix was not to forbid that knowledge, but a general provenance rule:
   a search that does not find the procedure's own identifier describes another act, so no sectors are taken from it.
 - **Ordering matters for cost.** A group's snapshot changes once its translation arrives, so classifying before the
   translation pays twice. Classification now waits until all members of a group are translated and embedded.

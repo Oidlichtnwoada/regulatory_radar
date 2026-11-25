@@ -44,7 +44,7 @@ On `labels.json` the differences are exactly the four documented disagreements b
 
 ## How the score developed
 
-Every change is a general rule, schema handling or mechanism; none refers to an item, a group id or a profile of the
+Every change is a general rule, schema handling or mechanism. None refers to an item, a group id or a profile of the
 eval sets, and no label was changed. Rule changes were checked first with `classify-preview` on the affected groups and
 on control groups the rule could tip (a dry run that stores nothing), and only then in a complete run.
 
@@ -54,7 +54,7 @@ on control groups the rule could tip (a dry run that stores nothing), and only t
 | 2 (baseline)             | Rate-limited provider fetch; translations without a summary no longer ask for a null field; final answers checked against the schema and corrected instead of crashing                    | 3                             |
 | 3 (final, table above)   | Prompt: energy-intensive industries named with their NACE divisions; packaging rules on use versus on manufacture; classification criteria without duties (taxonomy, eco-labels) borderline | **0** (1 group on the fallback) |
 
-Run 2 was patched while it ran (worker rebuilt on the same database), so its baseline is approximate; run 3 ran every
+Run 2 was patched while it ran (worker rebuilt on the same database), so its baseline is approximate. Run 3 ran every
 stage from scratch with the final code.
 
 What the runs showed:
@@ -62,7 +62,7 @@ What the runs showed:
 - **Rate limits decide whether an agent run survives.** The plan limits requests per second. Without pacing, a 429 in
   the middle of an agent run threw the run away together with the tokens it had already used. Each provider now has
   one shared fetch that spaces requests (`LLM_MIN_REQUEST_INTERVAL_MS`) and retries a 429 with backoff, honouring
-  `Retry-After`; rejected requests are not billed.
+  `Retry-After`. Rejected requests are not billed.
 - **Mistral Small leaves out fields and sometimes the whole answer.** It omits a field that must be null, answers in
   text instead of calling the `final_answer` tool, or sends an invalid enum value. Each final answer is now checked
   against its schema (the raw tool call or a JSON object in the text is used when LangChain's parser yields nothing),
@@ -75,8 +75,8 @@ What the runs showed:
 
 In the final run 9 of 53 classification attempts (on 6 groups) failed because the model gave no well-formed final
 answer even after two correction rounds. Most of these answers had neither `whyRelevant` nor `labels`, so they were
-most likely wrapped in another object (for example `{"name": "final_answer", "arguments": {...}}`); one missed the
-`rationale` of some labels. Five groups succeeded on a retry; `ES-BOE-0044` used up its three
+most likely wrapped in another object (for example `{"name": "final_answer", "arguments": {...}}`). One missed the
+`rationale` of some labels. Five groups succeeded on a retry. `ES-BOE-0044` used up its three
 attempts. The next step is to unwrap such answers before the schema check.
 
 ## Cost and operations

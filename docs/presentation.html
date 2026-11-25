@@ -7,49 +7,65 @@
 <style>
   :root {
     --bg: #f7f7f4; --fg: #1d1d1b; --muted: #5d5d58; --card: #ffffff; --line: #deded8;
-    --accent: #1f5fa8; --open: #b3261e; --vote: #8a4b00; --still: #5b3fa0; --ok: #1e7a3c;
+    --accent: #1f5fa8; --open: #b3261e; --vote: #8a4b00; --still: #5b3fa0; --ok: #1e7a3c; --info: #1f5fa8; --neutral: #6b6b66; --chip-fg: #fff;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
       --bg: #151514; --fg: #ececE8; --muted: #a3a39c; --card: #1f1f1d; --line: #34342f;
-      --accent: #7fb0ec; --open: #f2a19b; --vote: #e0a95c; --still: #b9a3ef; --ok: #7fd29a;
+      --accent: #7fb0ec; --open: #f2a19b; --vote: #e0a95c; --still: #b9a3ef; --ok: #7fd29a; --info: #7fb0ec; --neutral: #b8b8b0; --chip-fg: #151514;
     }
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
-    font: 18px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  .slide { display: none; min-height: 100vh; padding: 56px 16px 72px; max-width: 1080px; margin: 0 auto; }
-  .slide.active { display: block; }
-  h1 { font-size: clamp(32px, 5vw, 52px); margin: 0 0 12px; letter-spacing: -0.02em; }
-  h2 { font-size: clamp(24px, 3.4vw, 34px); margin: 0 0 20px; }
-  .kicker { color: var(--accent); font-weight: 600; text-transform: uppercase; font-size: 13px; letter-spacing: .08em; }
+    font: clamp(18px, 1.85vw, 28px)/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .slide { display: none; min-height: 100vh; padding: 40px 16px 80px; max-width: 1280px; margin: 0 auto; }
+  .slide.active { display: flex; flex-direction: column; justify-content: center; }
+  .slide > * { flex-shrink: 0; }
+  .roomy { font-size: 1.14em; }
+  .grid.two { grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); }
+  code { overflow-wrap: anywhere; }
+  h1 { font-size: clamp(34px, 5vw, 64px); margin: 0 0 12px; letter-spacing: -0.02em; }
+  h2 { font-size: clamp(26px, 3.6vw, 44px); margin: 0 0 28px; }
+  .kicker { color: var(--accent); font-weight: 600; text-transform: uppercase; font-size: 0.7em; letter-spacing: .08em; }
   .muted { color: var(--muted); }
-  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
-  .card h3 { margin: 0 0 6px; font-size: 17px; }
+  .grid { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 22px 24px; }
+  .card h3 { margin: 0 0 10px; font-size: 1.05em; }
   ul { padding-left: 20px; margin: 8px 0; } li { margin: 4px 0; }
-  code { font: 15px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--line); padding: 1px 5px; border-radius: 4px; }
-  .flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 16px 0; }
-  .step { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 8px; padding: 10px 12px; font-size: 15px; }
+  code { font: 0.85em ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--line); padding: 1px 5px; border-radius: 4px; }
+  .flow { display: flex; gap: 6px; align-items: stretch; margin: 8px 0 28px; }
+  .step { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 8px; padding: 12px 12px; font-size: 0.72em; }
   .arrow { color: var(--muted); }
-  .tier { display: inline-block; padding: 2px 8px; border-radius: 999px; color: #fff; font-size: 13px; font-weight: 600; }
-  .t1 { background: var(--open); } .t2 { background: var(--vote); } .t3 { background: var(--still); } .t5 { background: var(--ok); }
+  .flow .step { flex: 1 1 0; min-width: 0; }
+  .flow .arrow { align-self: center; }
+  .tier { display: inline-block; padding: 3px 12px; margin: 0 4px 6px 0; border-radius: 999px; color: var(--chip-fg); font-size: 0.8em; font-weight: 600; }
+  .t1 { background: var(--open); } .t2 { background: var(--vote); } .t3 { background: var(--still); } .t4 { background: var(--info); } .t5 { background: var(--ok); } .t6 { background: var(--neutral); }
   .table-wrap { overflow-x: auto; }
-  table { border-collapse: collapse; width: 100%; font-size: 16px; }
-  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  table { border-collapse: collapse; width: 100%; font-size: 0.85em; }
+  th, td { text-align: left; padding: 10px 10px; border-bottom: 1px solid var(--line); }
+  .metrics td, .metrics th { padding: 7px 10px; }
+  .metrics td:first-child { white-space: nowrap; font-weight: 600; }
+  .metrics th.group { color: var(--accent); padding-top: 18px; }
   nav { position: fixed; bottom: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center;
     padding: 10px 16px; background: var(--bg); border-top: 1px solid var(--line); font-size: 14px; }
   nav button { background: var(--card); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 14px; font: inherit; cursor: pointer; }
+  @page { size: 1280px 720px; margin: 0; }
+  @media print {
+    html, body { height: auto; font-size: 24px; }
+    .slide { display: flex; flex-direction: column; justify-content: center; height: 720px; min-height: 0;
+      max-width: none; padding: 32px 60px; break-after: page; overflow: hidden; }
+    nav { display: none; }
+  }
 </style>
 </head>
 <body>
 
-<section class="slide active">
+<section class="roomy slide active">
   <p class="kicker">Coding challenge · Regulatory Radar</p>
   <h1>Which rules need attention first, for my country and my sectors?</h1>
   <p class="muted">Self-hosted radar for chambers and associations: EU and national channels in any language, one entry per procedure, ranked by actionability.</p>
   <div class="grid" style="margin-top:28px">
-    <div class="card"><h3>One command</h3><code>docker compose up</code>; offline by default, Postgres as the only state.</div>
+    <div class="card"><h3>One command</h3><code>docker compose up</code>. Offline by default, Postgres as the only state.</div>
     <div class="card"><h3>5-phase pipeline</h3>Ingest → translate → embed → group → classify.</div>
     <div class="card"><h3>Measured</h3>Two label sets, offline and online (OpenAI, Mistral).</div>
   </div>
@@ -60,31 +76,31 @@
   <h2>Data sources, probed by hand</h2>
   <div class="table-wrap"><table>
     <tr><th>Source</th><th>Finding</th><th>Decision</th></tr>
-    <tr><td>EUR-Lex CELLAR SPARQL</td><td>Keyless, ~4 s per query, CELEX sectors 3/5, EuroVoc subjects; titles only</td><td>EU live adapter</td></tr>
-    <tr><td>BOE open data (ES)</td><td>One JSON summary per day; 404 on days without an issue</td><td>National live adapter</td></tr>
+    <tr><td>EUR-Lex CELLAR SPARQL</td><td>Keyless, ~4 s per query, CELEX sectors 3/5, EuroVoc subjects. Titles only</td><td>EU live adapter</td></tr>
+    <tr><td>BOE open data (ES)</td><td>One JSON summary per day. 404 on days without an issue</td><td>National live adapter</td></tr>
     <tr><td>Council, Think Tank, TRIS</td><td>Bot filter (403) or no answer</td><td>Not used: no workarounds</td></tr>
-    <tr><td>Seed data</td><td>Jurisdiction ≠ channel (TRIS carries national drafts); 40 of 53 items untagged; reactions are not new procedures</td><td>Relevance from text, grouping by refs</td></tr>
+    <tr><td>Seed data</td><td>Jurisdiction ≠ channel (TRIS carries national drafts). 40 of 53 items untagged. Reactions are not new procedures</td><td>Relevance from text, grouping by refs</td></tr>
   </table></div>
   <p class="muted">Both live APIs are date-addressable, so a source's watermark is a day.</p>
 </section>
 
-<section class="slide">
+<section class="roomy slide">
   <p class="kicker">Research</p>
   <h2>A common interface for every source</h2>
-  <div class="grid">
-    <div class="card"><h3><code>SourceAdapter</code></h3><code>fetch(since)</code> streams batches with a watermark; <code>normalize(record)</code> is pure. Seed file and live sources are the same to the pipeline.</div>
+  <div class="grid two">
+    <div class="card"><h3><code>SourceAdapter</code></h3><code>fetch(since)</code> streams batches with a watermark. <code>normalize(record)</code> is pure. Seed file and live sources are the same to the pipeline.</div>
     <div class="card"><h3>Common schema</h3>ISO 3166-1 country, ISO 639-1 language, ISO 8601 dates, reference key, action points (deadline, vote, standstill, adoption).</div>
-    <div class="card"><h3>Raw first</h3>Payload stored verbatim (JSONB), SHA-256 dedup; invalid records kept raw and listed as rejected.</div>
+    <div class="card"><h3>Raw first</h3>Payload stored verbatim (JSONB), SHA-256 dedup. Invalid records kept raw and listed as rejected.</div>
     <div class="card"><h3>Status</h3>Each pass ends <code>ok</code>, <code>degraded</code> (a failed day holds the watermark back) or <code>failed</code>, with item count and last fetch.</div>
   </div>
 </section>
 
-<section class="slide">
+<section class="roomy slide">
   <p class="kicker">Standards</p>
   <h2>NACE Rev. 2.1 only</h2>
   <div class="grid">
-    <div class="card"><h3>Current revision</h3>1,047 codes plus Eurostat explanatory notes; embedded once per model for semantic search.</div>
-    <div class="card"><h3>Rev. 2 mapped at the edge</h3>Seed tags and example profiles use Rev. 2. Eurostat's correspondence maps them once: <code>G47</code> → <code>G47.1</code>–<code>G47.7</code>, <code>G47.9</code>, <code>J60.39</code>. Not 1:1, a little broader by design.</div>
+    <div class="card"><h3>Current revision</h3>1,047 codes plus Eurostat explanatory notes. Embedded once per model for semantic search.</div>
+    <div class="card"><h3>Rev. 2 mapped at the edge</h3>Seed tags and example profiles use Rev. 2. Eurostat's correspondence maps them once: <code>G47</code> → <code>G47.1</code> to <code>G47.7</code>, <code>G47.9</code>, <code>J60.39</code>. Not 1:1, a little broader by design.</div>
     <div class="card"><h3>Hierarchical match</h3>Labels stored as <code>ltree</code> paths (<code>NACE.C.C24.C24_4</code>): selecting <code>C</code>, <code>C24</code> or <code>C24.4</code> is one GiST-indexed query.</div>
   </div>
 </section>
@@ -101,9 +117,9 @@
     <div class="step">Rank and serve<br><span class="muted">UI · REST · MCP · digest</span></div>
   </div>
   <div class="grid">
-    <div class="card"><h3>Stateless worker</h3>Each phase reads pending rows from Postgres and appends results with an engine id; failures retry after 1, then 5 min.</div>
-    <div class="card"><h3>Offline</h3>Phases 2–3 skipped; grouping by refs only; relevance from a multilingual concept lexicon.</div>
-    <div class="card"><h3>Online</h3>One provider (Mistral or OpenAI) for chat, embeddings and web search; its own database.</div>
+    <div class="card"><h3>Stateless worker</h3>Each phase reads pending rows from Postgres and appends results with an engine id. Failures retry after 1, then 5 min.</div>
+    <div class="card"><h3>Offline</h3>Phases 2 and 3 skipped. Grouping by refs only. Relevance from a multilingual concept lexicon.</div>
+    <div class="card"><h3>Online</h3>One provider (Mistral or OpenAI) for chat, embeddings and web search. Its own database.</div>
   </div>
 </section>
 
@@ -113,11 +129,11 @@
   <div class="grid">
     <div class="card"><h3>Grouping</h3><ul>
       <li>Instructions: what is and is not the same procedure, with examples</li>
-      <li>Input: identifiers (CELEX, procedure, TRIS, ELI) and pre-computed candidates</li>
+      <li>Input: identifiers (CELEX, procedure, TRIS, ELI) and precomputed candidates</li>
       <li>Code guard: join only with high confidence, same jurisdiction</li></ul></div>
     <div class="card"><h3>Classification</h3><ul>
       <li>Instructions: who carries the duty along the value chain, size thresholds, keyword traps</li>
-      <li>Code guard: unknown codes and titles sent back; skipped rule sectors added as borderline</li>
+      <li>Code guard: unknown codes and titles sent back. Skipped rule sectors added as borderline</li>
       <li>2 runs, a third on a tie, majority decides</li></ul></div>
     <div class="card"><h3>Tools</h3>Embedding neighbours, full-text search, read-only SQL, <code>web_search</code>, <code>fetch_url</code>, <code>search_nace</code>, <code>nace_notes</code>.</div>
   </div>
@@ -127,51 +143,66 @@
   <p class="kicker">Measured, not claimed</p>
   <h2>Testing the agent on the extended eval set</h2>
   <div class="table-wrap"><table>
-    <tr><th>Run</th><th>Recall / precision</th><th>Extended set tiers</th><th>Standard metals_at strict R</th></tr>
-    <tr><td>Offline (deterministic)</td><td>1.00 / 1.00</td><td>exact</td><td>0.86</td></tr>
-    <tr><td>OpenAI <code>gpt-6-luna</code></td><td>1.00 / 1.00</td><td>1 tier off</td><td>0.79</td></tr>
-    <tr><td>Mistral <code>mistral-small-2603</code></td><td>1.00 / 1.00</td><td>exact (1 group on fallback)</td><td>0.86</td></tr>
+    <tr><th>Run</th><th>Classification recall / precision</th><th>Tier agreement (extended)</th><th>Strict recall (standard, metals_at)</th><th>Grouping pair P / R</th></tr>
+    <tr><td>Offline (deterministic)</td><td>1.00 / 1.00</td><td>1.00</td><td>0.86</td><td>1.00 / 1.00</td></tr>
+    <tr><td>OpenAI <code>gpt-6-luna</code></td><td>1.00 / 1.00</td><td>0.98 (metals_at, 1 tier)</td><td>0.79</td><td>1.00 / 1.00</td></tr>
+    <tr><td>Mistral <code>mistral-small-2603</code></td><td>1.00 / 1.00</td><td>1.00 (1 group fallback)</td><td>0.86</td><td>1.00 / 1.00</td></tr>
   </table></div>
   <ul>
-    <li><b>Extended set:</b> 3 profiles, labelled blind by three model annotators (158/159 agree); the 4 differences to the standard set are argued.</li>
-    <li><b>Loop:</b> dry run on affected groups → general prompt rule → full fresh run. No item-specific rules, no label changes.</li>
-    <li><b>Biggest moves:</b> OpenAI Responses API, majority consensus, value-chain rules.</li>
+    <li><b>Extended set:</b> 3 profiles, labelled blind by three model annotators (158/159 agree).</li>
+    <li><b>Loop:</b> dry run → general prompt rule → full fresh run. No item-specific rules, no label changes.</li>
   </ul>
-  <p class="muted">Caveats: offline scores are training-set scores; one online run per provider, on different prompt versions.</p>
+  <p class="muted">Caveats: offline = training-set scores. One online run per provider, different prompt versions.</p>
 </section>
 
 <section class="slide">
+  <p class="kicker">Measured, not claimed</p>
+  <h2>What the metrics measure</h2>
+  <div class="table-wrap"><table class="metrics">
+    <tr><th colspan="3" class="group">Classification, per profile · shown = relevant + borderline. Groups labelled borderline are not scored</th></tr>
+    <tr><td>Recall</td><td>relevant groups shown ÷ relevant groups</td><td>missed rules</td></tr>
+    <tr><td>Precision</td><td>relevant shown ÷ (relevant + not relevant) shown</td><td>noise</td></tr>
+    <tr><td>Strict P/R</td><td>the same, counting only groups we rate relevant</td><td>the strong tier</td></tr>
+    <tr><td>Tier agreement</td><td>groups with our exact tier ÷ all labelled groups</td><td>borderline included</td></tr>
+    <tr><th colspan="3" class="group">Grouping · every procedure group becomes its item pairs (3 items → 3 pairs)</th></tr>
+    <tr><td>Pair recall</td><td>labelled pairs we also grouped ÷ labelled pairs</td><td>missed merges: shown twice</td></tr>
+    <tr><td>Pair precision</td><td>our pairs the labels confirm ÷ our pairs</td><td>wrong merges: item hidden</td></tr>
+  </table></div>
+  <p class="muted">Also: F2 (recall ×2), jurisdiction leaks, "why relevant" coverage, ranking determinism.</p>
+</section>
+
+<section class="roomy slide">
   <p class="kicker">Underneath</p>
   <h2>Matching country × NACE in one indexed query</h2>
   <div class="grid">
-    <div class="card"><h3>Labels, not profiles</h3>One row per group × country × NACE code; EU groups get all 27 countries. The profile only filters.</div>
+    <div class="card"><h3>Labels, not profiles</h3>One row per group × country × NACE code. EU groups get all 27 countries. The profile only filters.</div>
     <div class="card"><h3>NACE hierarchy</h3><code>C24</code> → <code>NACE.C.C24.*</code> + <code>NACE.C</code> + <code>NACE</code>: own branch up and down, never siblings.</div>
-    <div class="card"><h3>Fast reads</h3>Materialized views refreshed after each cycle; GiST on <code>(country, nace_path)</code>; scope, match, rank and page in one SQL query.</div>
+    <div class="card"><h3>Fast reads</h3>Materialized views refreshed after each cycle. GiST on <code>(country, nace_path)</code>. Scope, match, rank and page in one SQL query.</div>
   </div>
 </section>
 
-<section class="slide">
+<section class="roomy slide">
   <p class="kicker">Underneath</p>
   <h2>How the list is ordered</h2>
-  <p><span class="tier t1">Open window</span> <span class="tier t2">Upcoming vote</span> <span class="tier t3">Standstill</span> In procedure <span class="tier t5">Adopted</span> Information</p>
+  <p><span class="tier t1">Open window</span> <span class="tier t2">Upcoming vote</span> <span class="tier t3">Standstill</span> <span class="tier t4">In procedure</span> <span class="tier t5">Adopted</span> <span class="tier t6">Information</span></p>
   <div class="grid">
-    <div class="card"><h3><code>radar_actionability()</code></h3>One immutable SQL function picks the tier; windows, votes and standstills count only if their date is on or after <code>as_of</code>.</div>
-    <div class="card"><h3>Tie-breaks</h3>Action date (soonest), verdict (relevant first), latest publication, group key. Same input, same output.</div>
-    <div class="card"><h3>In the UI</h3>API order unchanged; relevant + borderline by default; <b>NEW</b> since the last "Mark all as seen".</div>
+    <div class="card"><h3><code>radar_actionability()</code></h3>One immutable SQL function picks the tier. Windows, votes and standstills count only if their date is on or after <code>as_of</code>.</div>
+    <div class="card"><h3>Tiebreakers</h3>Action date (soonest), verdict (relevant first), latest publication, group key. Same input, same output.</div>
+    <div class="card"><h3>In the UI</h3>API order unchanged. Relevant + borderline by default. <b>NEW</b> since the last "Mark all as seen".</div>
   </div>
 </section>
 
 <section class="slide">
-  <p class="kicker">Trade-offs</p>
+  <p class="kicker">Tradeoffs</p>
   <h2>The interesting decisions</h2>
   <div class="table-wrap"><table>
     <tr><th>Question</th><th>Decision</th></tr>
-    <tr><td>Threshold?</td><td>Recall first: show relevant + borderline; stated tags are always relevant.</td></tr>
-    <tr><td>Can an LLM remove an item?</td><td>No. It adds and ranks; a pair relevant once stays tracked.</td></tr>
+    <tr><td>Threshold?</td><td>Recall first: show relevant + borderline. Stated tags are always relevant.</td></tr>
+    <tr><td>Can an LLM remove an item?</td><td>No. It adds and ranks. A pair relevant once stays tracked.</td></tr>
     <tr><td>Same procedure?</td><td>Shared ref or reaction (deterministic), plus agent joins with stored rationale.</td></tr>
-    <tr><td>Reproducible?</td><td>Results stored with engine id and reused; ranking is pure SQL.</td></tr>
+    <tr><td>Reproducible?</td><td>Results stored with engine id and reused. Ranking is pure SQL.</td></tr>
     <tr><td>Operator data?</td><td>Never sent: classification is profile-independent. EU-only inference via Mistral's EU endpoint, without web search.</td></tr>
-    <tr><td>Slow source?</td><td>Timeouts and bounded backoff; the run shows <code>degraded</code>.</td></tr>
+    <tr><td>Slow source?</td><td>Timeouts and bounded backoff. The run shows <code>degraded</code>.</td></tr>
   </table></div>
 </section>
 
@@ -179,8 +210,8 @@
   <p class="kicker">Agentic practice</p>
   <h2>How I worked with the agent</h2>
   <div class="grid">
-    <div class="card"><h3>Setup</h3><code>AGENTS.md</code> rules (spec first, append-only DB, Rev. 2.1 only, functional, 100 % docs), pre-commit gate, sub-agents for the UI and blind labelling.</div>
-    <div class="card"><h3>My steering</h3>NACE Rev. 2.1; two databases; OpenAI Responses API; majority consensus; general rules only; dry runs before full runs.</div>
+    <div class="card"><h3>Setup</h3><code>AGENTS.md</code> rules (spec first, append-only DB, Rev. 2.1 only, functional, 100 % docs), precommit gate, subagents for the UI and blind labelling.</div>
+    <div class="card"><h3>My steering</h3>NACE Rev. 2.1. Two databases. OpenAI Responses API. Majority consensus. General rules only. Dry runs before full runs.</div>
     <div class="card"><h3>Verification</h3>Real stack, testcontainers, Playwright on desktop and phone, live-source smoke run, eval after every change.</div>
     <div class="card"><h3>Where it went wrong</h3><ul>
       <li>Overfitted the offline lexicon</li>
@@ -190,14 +221,14 @@
   </div>
 </section>
 
-<section class="slide">
+<section class="roomy slide">
   <p class="kicker">Live extension</p>
   <h2>Where new requirements plug in</h2>
-  <div class="grid">
+  <div class="grid two">
     <div class="card"><h3>New source</h3>One <code>SourceAdapter</code> plus one entry in <code>registry.ts</code>.</div>
-    <div class="card"><h3>New ranking rule</h3>Change <code>radar_actionability</code> in a migration; API, digest and eval follow.</div>
+    <div class="card"><h3>New ranking rule</h3>Change <code>radar_actionability</code> in a migration. API, digest and eval follow.</div>
     <div class="card"><h3>New endpoint</h3>Edit <code>openapi.yaml</code>, <code>npm run generate</code>: client, types, validation and MCP tool follow.</div>
-    <div class="card"><h3>Left rough</h3>No auth/TLS; EUR-Lex titles only (no deadlines); BOE has no re-scan window; one online run per provider.</div>
+    <div class="card"><h3>Left rough</h3>No auth/TLS. EUR-Lex titles only (no deadlines). BOE has no rescan window. One online run per provider.</div>
   </div>
 </section>
 
