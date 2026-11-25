@@ -1,5 +1,5 @@
 {
-  "_note": "Extended labels for data/items.json, created from scratch by three independent model annotators (majority vote) plus an adversarial review; AI:AT labels were not consulted. Covers all three profiles. Like labels.json, a procedure group is named after its first member in data/items.json order and labels refer to groups; a duplicate or reaction counts as its group. synthetic / simplified, as of 2026-11, not an official AI:AT position.",
+  "_note": "Extended labels for data/items.json, created from scratch by three independent model annotators (majority vote) plus an adversarial review; the standard labels (labels.json) were not consulted. Covers all three profiles. Like labels.json, a procedure group is named after its first member in data/items.json order and labels refer to groups; a duplicate or reaction counts as its group. Synthetic / simplified, as of 2026-11.",
   "as_of": "2026-11-16",
   "procedure_groups": {
     "EU-EP-0001": [

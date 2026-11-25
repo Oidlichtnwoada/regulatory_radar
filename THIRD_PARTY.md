@@ -1,6 +1,6 @@
 # Third-party components, models, data and sources
 
-The submission itself is licensed under Apache-2.0 (see `LICENSE`). Everything below is used under terms compatible with that.
+This project is licensed under Apache-2.0 (see `LICENSE`). Everything below is used under terms compatible with that.
 
 ## Data sources (live adapters)
 
@@ -15,7 +15,7 @@ No bot filter, login or rate limit is worked around. Requests that answer 403 or
 
 | Dataset                                                                                                                  | Use                                                       | Licence                                                       |
 | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------- | ------------------------------------------------------------- |
-| AI:AT challenge seed data (`data/items*.json`, `data/eval/labels.json`, `data/examples`, `data/sources.yaml`)            | File source, evaluation                                   | Apache-2.0 (challenge repository)                             |
+| Challenge seed data (`data/items*.json`, `data/eval/labels.json`, `data/examples`, `data/sources.yaml`)                  | File source, evaluation                                   | Apache-2.0 (challenge repository)                             |
 | NACE Rev. 2.1 codelist, Eurostat SDMX `ESTAT/NACE_R2_1` → `data/nace_rev2_1.csv`                                         | Sector taxonomy (all 1,047 codes)                         | © European Union, reuse under Commission Decision 2011/833/EU |
 | NACE Rev. 2.1 explanatory notes, EU Vocabularies (`data.europa.eu/ux2/nace2.1`, English) → `data/nace_rev2_1_notes.json` | Agent NACE search; embedded online (861 codes have notes) | © European Union, reuse under Commission Decision 2011/833/EU |
 | NACE Rev. 2 → Rev. 2.1 correspondence, Eurostat `NACE2_NACE2.1` (EU Vocabularies) → `data/nace_rev2_to_rev2_1.csv`       | Mapping Rev. 2 seed tags and example profiles to Rev. 2.1 | © European Union, reuse under Commission Decision 2011/833/EU |

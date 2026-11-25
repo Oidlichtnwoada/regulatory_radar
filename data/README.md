@@ -1,6 +1,6 @@
 # Seed dataset: fields & notes
 
-> ⚠️ **The dataset is synthetic and simplified (as of 2026-11) and not an official AI:AT position.** All items, procedure numbers, references and organisations are invented. They follow the semantics of real public channels (EUR-Lex, the European Parliament agenda, Commission consultations, TRIS, national gazettes and consultation portals), but no item describes a real procedure. No domain knowledge needed: the fields below are understandable without prior knowledge. Treat the data as play material, not as legal reality.
+> ⚠️ **The dataset is synthetic and simplified (as of 2026-11).** All items, procedure numbers, references and organisations are invented. They follow the semantics of real public channels (EUR-Lex, the European Parliament agenda, Commission consultations, TRIS, national gazettes and consultation portals), but no item describes a real procedure. No domain knowledge needed: the fields below are understandable without prior knowledge. Treat the data as play material, not as legal reality.
 
 ## Contents
 

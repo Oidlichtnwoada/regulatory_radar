@@ -1,30 +1,15 @@
-# Security Policy — Regulatory Radar (AI:AT Hiring Challenge)
+# Security policy
 
 ## Scope
 
-This repository is a **hiring-challenge scaffold** — task description, a synthetic
-seed dataset, a list of public sources and a code snippet. There are **no production
-systems behind it**, no live services, no real user data, and no credentials. The
-seed data is synthetic / simplified and not intended for production use.
+Regulatory Radar is a coding-challenge project. There are no production systems behind it, no real user data and no credentials in the repository; the seed data is synthetic.
 
-## Reporting a Vulnerability
+## Known limits
 
-If you find a security issue in this scaffold (for example an accidentally committed
-secret, or an unsafe code snippet that could mislead candidates), please report it
-responsibly.
+- No authentication or TLS: run it on a trusted network or behind a reverse proxy.
+- API keys belong in `.env` (git-ignored); `.env.example` lists the variables without values.
+- The agents' SQL tool uses a SELECT-only database role in a read-only transaction with a 5 s timeout; `fetch_url` only opens public pages.
 
-**Email:** [aiandbusinessgrowth@ai-at.eu](mailto:aiandbusinessgrowth@ai-at.eu)
+## Reporting a vulnerability
 
-Please include a short description, steps to reproduce, and the affected file(s).
-Do not open a public issue for a suspected secret leak.
-
-## Response Expectation
-
-We aim to acknowledge reports within **5 business days** and to remove or rotate any
-exposed secret as soon as it is confirmed.
-
-## Disclosure
-
-We follow responsible disclosure. Because this is a challenge scaffold and not a
-deployed product, fixes are applied directly to the repository without a formal
-advisory.
+Report suspected issues (for example a committed secret) privately to the repository owner, not in a public issue. Include a short description, steps to reproduce and the affected files.

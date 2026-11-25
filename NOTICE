@@ -1,9 +1,9 @@
-Regulatory Radar: AI:AT Hiring Challenge
-Copyright 2026 AI Factory Austria (AI:AT)
-
+Regulatory Radar
 Licensed under the Apache License, Version 2.0 (see LICENSE).
 
-The seed dataset in data/ is synthetic / simplified (as of 2026-11), does not
-describe real legislative procedures and is not an official AI:AT position.
-The public sources listed in data/sources.yaml are operated by third parties
-under their own terms of use.
+The seed dataset, example profiles, standard eval labels and source list in
+data/, the brief in docs/CHALLENGE.md and code-review/snippet.py come from the
+challenge repository (Copyright 2026 AI Factory Austria, Apache-2.0).
+The seed dataset is synthetic / simplified (as of 2026-11) and does not
+describe real legislative procedures. The public sources listed in
+data/sources.yaml are operated by third parties under their own terms of use.

@@ -24,7 +24,7 @@ export type CycleStats = Readonly<
 >;
 
 /**
- * Orchestrates stages 2-4 continuously: translate -> embed -> group -> classify -> refresh read models.
+ * Orchestrates stages 2-5 continuously: translate -> embed -> group -> classify -> refresh read models.
  * Each stage reads its pending work from Postgres, so the worker is stateless and restart-safe.
  */
 @Injectable()
