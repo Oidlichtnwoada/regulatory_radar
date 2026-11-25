@@ -1,0 +1,258 @@
+{
+  "engines": {
+    "translation": "mistral:mistral-small-2603",
+    "embedding": "mistral:mistral-embed",
+    "grouping": "agent:mistral:mistral-small-2603",
+    "classification": "agent:mistral:mistral-small-2603"
+  },
+  "pipelineCaughtUp": false,
+  "agentFailures": {
+    "grouping": 0,
+    "classification": 1
+  },
+  "results": [
+    {
+      "labels": "eval/labels.json",
+      "asOf": "2026-11-16",
+      "grouping": {
+        "pairPrecision": 1,
+        "pairRecall": 1,
+        "exactGroups": 1,
+        "sameNames": 1
+      },
+      "profiles": [
+        {
+          "profile": "metals_at",
+          "country": "AT",
+          "naceCodes": [
+            "C24",
+            "C25",
+            "C28.21"
+          ],
+          "shown": {
+            "recall": 1,
+            "precision": 1,
+            "f2": 1
+          },
+          "strict": {
+            "recall": 0.857,
+            "precision": 1,
+            "f2": 0.882
+          },
+          "tiers": {
+            "agreement": 0.933,
+            "mismatches": [
+              {
+                "group": "EU-EP-0034",
+                "label": "borderline",
+                "ours": "relevant"
+              },
+              {
+                "group": "EU-LEX-0004",
+                "label": "relevant",
+                "ours": "borderline"
+              },
+              {
+                "group": "EU-CON-0007",
+                "label": "relevant",
+                "ours": "borderline"
+              }
+            ]
+          },
+          "counts": {
+            "entries": 16,
+            "tp": 14,
+            "fp": 0,
+            "fn": 0,
+            "groupsChecked": 29
+          },
+          "missed": [],
+          "falseAlarms": [],
+          "splitGroups": [],
+          "jurisdictionLeaks": 0,
+          "whyRelevantCoverage": 1,
+          "rankingDeterministic": true,
+          "tiersOrdered": true
+        },
+        {
+          "profile": "retail_es",
+          "country": "ES",
+          "naceCodes": [
+            "G47.1",
+            "G47.2",
+            "G47.3",
+            "G47.4",
+            "G47.5",
+            "G47.6",
+            "G47.7",
+            "G47.9",
+            "J60.39"
+          ],
+          "shown": {
+            "recall": 1,
+            "precision": 1,
+            "f2": 1
+          },
+          "strict": {
+            "recall": 1,
+            "precision": 1,
+            "f2": 1
+          },
+          "tiers": {
+            "agreement": 0.978,
+            "mismatches": [
+              {
+                "group": "ES-BOE-0050",
+                "label": "borderline",
+                "ours": "relevant"
+              }
+            ]
+          },
+          "counts": {
+            "entries": 15,
+            "tp": 13,
+            "fp": 0,
+            "fn": 0,
+            "groupsChecked": 30
+          },
+          "missed": [],
+          "falseAlarms": [],
+          "splitGroups": [],
+          "jurisdictionLeaks": 0,
+          "whyRelevantCoverage": 1,
+          "rankingDeterministic": true,
+          "tiersOrdered": true
+        }
+      ]
+    },
+    {
+      "labels": "eval/labels.extended.json",
+      "asOf": "2026-11-16",
+      "grouping": {
+        "pairPrecision": 1,
+        "pairRecall": 1,
+        "exactGroups": 1,
+        "sameNames": 1
+      },
+      "profiles": [
+        {
+          "profile": "metals_at",
+          "country": "AT",
+          "naceCodes": [
+            "C24",
+            "C25",
+            "C28.21"
+          ],
+          "shown": {
+            "recall": 1,
+            "precision": 1,
+            "f2": 1
+          },
+          "strict": {
+            "recall": 1,
+            "precision": 1,
+            "f2": 1
+          },
+          "tiers": {
+            "agreement": 1,
+            "mismatches": []
+          },
+          "counts": {
+            "entries": 16,
+            "tp": 13,
+            "fp": 0,
+            "fn": 0,
+            "groupsChecked": 29
+          },
+          "missed": [],
+          "falseAlarms": [],
+          "splitGroups": [],
+          "jurisdictionLeaks": 0,
+          "whyRelevantCoverage": 1,
+          "rankingDeterministic": true,
+          "tiersOrdered": true
+        },
+        {
+          "profile": "retail_es",
+          "country": "ES",
+          "naceCodes": [
+            "G47.1",
+            "G47.2",
+            "G47.3",
+            "G47.4",
+            "G47.5",
+            "G47.6",
+            "G47.7",
+            "G47.9",
+            "J60.39"
+          ],
+          "shown": {
+            "recall": 1,
+            "precision": 1,
+            "f2": 1
+          },
+          "strict": {
+            "recall": 1,
+            "precision": 1,
+            "f2": 1
+          },
+          "tiers": {
+            "agreement": 1,
+            "mismatches": []
+          },
+          "counts": {
+            "entries": 15,
+            "tp": 14,
+            "fp": 0,
+            "fn": 0,
+            "groupsChecked": 30
+          },
+          "missed": [],
+          "falseAlarms": [],
+          "splitGroups": [],
+          "jurisdictionLeaks": 0,
+          "whyRelevantCoverage": 1,
+          "rankingDeterministic": true,
+          "tiersOrdered": true
+        },
+        {
+          "profile": "agrifood_pl",
+          "country": "PL",
+          "naceCodes": [
+            "A01",
+            "C10",
+            "C11.07"
+          ],
+          "shown": {
+            "recall": 1,
+            "precision": 1,
+            "f2": 1
+          },
+          "strict": {
+            "recall": 1,
+            "precision": 1,
+            "f2": 1
+          },
+          "tiers": {
+            "agreement": 1,
+            "mismatches": []
+          },
+          "counts": {
+            "entries": 8,
+            "tp": 4,
+            "fp": 0,
+            "fn": 0,
+            "groupsChecked": 24
+          },
+          "missed": [],
+          "falseAlarms": [],
+          "splitGroups": [],
+          "jurisdictionLeaks": 0,
+          "whyRelevantCoverage": 1,
+          "rankingDeterministic": true,
+          "tiersOrdered": true
+        }
+      ]
+    }
+  ]
+}
