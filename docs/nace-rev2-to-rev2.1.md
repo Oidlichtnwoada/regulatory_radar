@@ -11,7 +11,7 @@ Rev. 2 codes are mapped to Rev. 2.1 at the very edge, so everything behind it (d
 | -------------------------------------------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | Seed item tags                                     | when a record is normalised during ingestion (`sources/file.source.ts`)             | Rev. 2.1 codes on the finding; the original tags stay in `attributes.naceTagsOriginal` and the raw payload |
 | Example profiles                                   | when the API starts (`domain/presets.ts`, served as `GET /api/v1/profiles/presets`) | Rev. 2.1 selection used by the UI presets and by the eval                                                  |
-| A Rev. 2 code answered by the classification agent | in the code check (`naceLabelProblems`)                                             | not stored: the agent is asked to correct it, with the Rev. 2.1 codes as a hint                            |
+| A Rev. 2 code answered by the classification agent | in the code check (`naceLabelProblems`, `validLabels`)                              | the agent is asked to correct it, with the Rev. 2.1 codes as a hint. If it keeps the code, it is mapped    |
 
 ## How the mapping works
 

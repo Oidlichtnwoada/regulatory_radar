@@ -90,18 +90,26 @@ describe("validation of the agent's labels", () => {
     rationale: `agent ${naceCode}`,
   });
 
-  it('separates keyword traps, drops codes whose title still does not match, normalises countries', () => {
+  it('separates keyword traps, drops codes whose title still does not match, maps Rev. 2 codes, normalises countries', () => {
     const { kept, rejected, dropped } = validLabels(tax, 'EU', [
       agent('c24', 'Manufacture of basic metals', 'relevant', ['el', 'at', 'US']),
       agent('G47', 'Retail trade', 'not_relevant', null),
       agent('C33', 'Computer programming activities', 'relevant', null),
       agent('K64', 'Financial services', 'relevant', null),
     ]);
-    expect(kept).toEqual([
-      { naceCode: 'C24', verdict: 'relevant', score: null, rationale: 'agent c24', countries: ['GR', 'AT'] },
-    ]);
+    expect(kept[0]).toEqual({
+      naceCode: 'C24',
+      verdict: 'relevant',
+      score: null,
+      rationale: 'agent c24',
+      countries: ['GR', 'AT'],
+    });
     expect(rejected.map((l) => l.naceCode)).toEqual(['G47']);
-    expect(dropped).toHaveLength(2);
+    // K64 is a Rev. 2 code the model kept: mapped with the official correspondence instead of losing the label.
+    expect(kept.filter((l) => l.naceCode !== 'C24').map((l) => [l.naceCode, l.rationale])).toEqual([
+      ['L64', 'agent K64 (mapped from NACE Rev. 2 K64)'],
+    ]);
+    expect(dropped).toHaveLength(1);
   });
 
   it('discards labels the agent marks as speculative, without counting them as invalid', () => {

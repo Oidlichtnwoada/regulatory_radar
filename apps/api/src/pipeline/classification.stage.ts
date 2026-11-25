@@ -232,9 +232,10 @@ export interface ValidatedLabels {
 }
 
 /**
- * Checks the agent's labels: speculative ones (no evidence, by the agent's own basis) are discarded; unknown codes
- * and codes whose title still does not match after the correction rounds are dropped; country codes are normalised
- * (EL -> GR, case) and an empty or out-of-scope list means the whole scope. Pure.
+ * Checks the agent's labels: speculative ones (no evidence, by the agent's own basis) are discarded. A NACE Rev. 2 code
+ * the model kept through the correction rounds is mapped with the official correspondence (recall first, as at every
+ * other edge). Other unknown codes and codes whose title still does not match are dropped. Country codes are
+ * normalised (EL -> GR, case) and an empty or out-of-scope list means the whole scope. Pure.
  */
 export const validLabels = (
   tax: NaceTaxonomy,
@@ -244,20 +245,27 @@ export const validLabels = (
   const scope = new Set(countriesInScope(jurisdiction));
   const checked = labels
     .filter((l) => l.basis !== 'speculative')
-    .map((l) => {
+    .flatMap((l) => {
       const naceCode = l.naceCode.trim().toUpperCase();
-      const problems = naceLabelProblems(tax, [{ naceCode, naceTitle: l.naceTitle }]);
       const countries = [
         ...new Set((l.countries ?? []).flatMap((c) => normalizeJurisdiction(c) ?? [])),
       ].filter((c) => scope.has(c));
-      const label: SectorLabel = {
-        naceCode,
+      const label = (code: string, rationale: string): SectorLabel => ({
+        naceCode: code,
         verdict: l.verdict,
         score: null,
-        rationale: l.rationale,
+        rationale,
         ...(countries.length ? { countries } : {}),
-      };
-      return { label, problem: problems[0] ?? null };
+      });
+      const rev2 =
+        naceCode === HORIZONTAL || tax.byCode.has(naceCode) ? [] : (mapRev2Code(tax, naceCode)?.codes ?? []);
+      if (rev2.length)
+        return rev2.map((code) => ({
+          label: label(code, `${l.rationale} (mapped from NACE Rev. 2 ${naceCode})`),
+          problem: null,
+        }));
+      const problems = naceLabelProblems(tax, [{ naceCode, naceTitle: l.naceTitle }]);
+      return [{ label: label(naceCode, l.rationale), problem: problems[0] ?? null }];
     });
   const ok = checked.filter((c) => c.problem === null).map((c) => c.label);
   return {
