@@ -56,24 +56,23 @@ export const HEALTH_CHIPS: Readonly<Record<SourceHealth, ChipSpec>> = {
 export const ALL_VERDICTS: readonly Verdict[] = [Verdict.relevant, Verdict.borderline, Verdict.not_relevant];
 
 /**
- * Case-insensitive NACE search on code and title, excluding already selected codes.
- * Keeps taxonomy order so the hierarchy stays readable; returns at most `limit` codes.
+ * NACE filter in taxonomy order, excluding already selected codes (case-insensitive). When the query is the prefix of
+ * any code (`V`, `c24`, `C24.4`), it filters by code prefix; otherwise it searches the titles (full text).
+ * Without a query it lists the complete taxonomy.
  */
 export const searchNace = (
   codes: readonly NaceCode[],
   query: string,
   exclude: readonly string[],
-  limit = 80,
 ): NaceCode[] => {
   const needle = query.trim().toLowerCase();
   const excluded = new Set(exclude);
-  return codes
-    .filter(
-      (c) =>
-        !excluded.has(c.code) &&
-        (needle === '' || c.code.toLowerCase().startsWith(needle) || c.title.toLowerCase().includes(needle)),
-    )
-    .slice(0, limit);
+  const byCode = codes.some((c) => c.code.toLowerCase().startsWith(needle));
+  return codes.filter(
+    (c) =>
+      !excluded.has(c.code) &&
+      (byCode ? c.code.toLowerCase().startsWith(needle) : c.title.toLowerCase().includes(needle)),
+  );
 };
 
 /** Builds a URL query string from list parameters, omitting empty lists (comma-separated, as in the OpenAPI spec). */

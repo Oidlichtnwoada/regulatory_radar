@@ -35,17 +35,18 @@ const taxonomy: NaceCode[] = [
 ];
 
 describe('searchNace', () => {
-  it('matches code prefixes and title words case-insensitively, keeping taxonomy order', () => {
+  it('lists every code without a query, minus the selected codes', () => {
+    expect(searchNace(taxonomy, '', ['C']).map((c) => c.code)).toEqual(['C24', 'C24.4', 'G', 'G47']);
+  });
+
+  it('filters by code prefix when the query starts any code, even if titles contain it', () => {
     expect(searchNace(taxonomy, 'c24', []).map((c) => c.code)).toEqual(['C24', 'C24.4']);
+    expect(searchNace(taxonomy, 'g', []).map((c) => c.code)).toEqual(['G', 'G47']);
+  });
+
+  it('otherwise searches the titles, case-insensitively, in taxonomy order', () => {
     expect(searchNace(taxonomy, 'RETAIL', []).map((c) => c.code)).toEqual(['G', 'G47']);
-  });
-
-  it('excludes selected codes and honours the limit', () => {
-    expect(searchNace(taxonomy, '', ['C', 'G']).map((c) => c.code)).toEqual(['C24', 'C24.4', 'G47']);
-    expect(searchNace(taxonomy, '', [], 2)).toHaveLength(2);
-  });
-
-  it('does not match a code in the middle (C24 must not find G47 via "4")', () => {
+    expect(searchNace(taxonomy, 'metals', []).map((c) => c.code)).toEqual(['C24', 'C24.4']);
     expect(searchNace(taxonomy, '4', []).map((c) => c.code)).toEqual([]);
   });
 });
