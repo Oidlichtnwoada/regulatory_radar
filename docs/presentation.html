@@ -44,6 +44,10 @@
   table { border-collapse: collapse; width: 100%; font-size: 0.85em; }
   th, td { text-align: left; padding: 10px 10px; border-bottom: 1px solid var(--line); }
   .metrics td, .metrics th { padding: 7px 10px; }
+  .footnote { display: grid; grid-template-columns: max-content 1fr; gap: 2px 14px; margin: 14px 0 0; padding-top: 10px;
+    border-top: 1px solid var(--line); font-size: 0.62em; color: var(--muted); }
+  .footnote dt { font-weight: 600; color: var(--fg); }
+  .footnote dd { margin: 0; }
   .metrics td:first-child { white-space: nowrap; font-weight: 600; }
   .metrics th.group { color: var(--accent); padding-top: 18px; }
   nav { position: fixed; bottom: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center;
@@ -144,15 +148,20 @@
   <h2>Testing the agent on the extended eval set</h2>
   <div class="table-wrap"><table>
     <tr><th>Run</th><th>Classification recall / precision</th><th>Tier agreement (extended)</th><th>Strict recall (standard, metals_at)</th><th>Grouping pair P / R</th></tr>
-    <tr><td>Offline (deterministic)</td><td>1.00 / 1.00</td><td>1.00</td><td>0.86</td><td>1.00 / 1.00</td></tr>
     <tr><td>OpenAI <code>gpt-6-luna</code></td><td>1.00 / 1.00</td><td>0.98 (metals_at, 1 tier)</td><td>0.79</td><td>1.00 / 1.00</td></tr>
     <tr><td>Mistral <code>mistral-small-2603</code></td><td>1.00 / 1.00</td><td>1.00 (1 group fallback)</td><td>0.86</td><td>1.00 / 1.00</td></tr>
   </table></div>
   <ul>
     <li><b>Extended set:</b> 3 profiles, labelled blind by three model annotators (158/159 agree).</li>
     <li><b>Loop:</b> dry run → general prompt rule → full fresh run. No item-specific rules, no label changes.</li>
+    <li><b>Caveat:</b> one run per provider, on different prompt versions.</li>
   </ul>
-  <p class="muted">Caveats: offline = training-set scores. One online run per provider, different prompt versions.</p>
+  <dl class="footnote">
+    <dt>Recall / precision</dt><dd>Shown = we rate it relevant or borderline. Recall: share of rules labelled relevant that we show. Precision: share of shown rules that are labelled relevant, not "not relevant". Rules labelled borderline are not scored.</dd>
+    <dt>Tier agreement</dt><dd>All labelled rules, all three tiers: share where our tier (relevant, borderline, not relevant) is exactly the labelled one. Too high and too low both count as misses.</dd>
+    <dt>Strict recall</dt><dd>Only rules labelled relevant: share we also rate relevant. Borderline counts as a miss here, though it is still shown.</dd>
+    <dt>Grouping pair P / R</dt><dd>Counted over pairs of items. Pair precision (P): of the pairs we put in one group, share that belong to the same procedure (catches wrong merges). Pair recall (R): of the pairs that belong together, share we put in one group (catches missed merges).</dd>
+  </dl>
 </section>
 
 <section class="slide">
