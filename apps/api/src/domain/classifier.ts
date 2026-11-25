@@ -56,23 +56,59 @@ export interface ClassifierInput {
 /** Numeric strength of a verdict. */
 export const verdictRank = (v: Verdict): number => VERDICTS.indexOf(v);
 
+/** Depth of a code in the hierarchy; the horizontal code (every sector) is the root. */
+const naceDepth = (code: string): number => (code === HORIZONTAL ? 0 : naceLineage(code).length);
+
 /**
- * Consensus of independent classification runs of one group: a label of the first run is kept only when every other
- * run has a label on the same code, an ancestor or a descendant (the horizontal code only matches itself), and it gets
- * the lowest verdict among the runs (the best match per run). Damps run-to-run variance of a model: a sector only
- * one run names, or calls relevant, does not decide the result alone. Pure.
+ * The sectors two labels both cover (null when disjoint): the deeper code (the horizontal code covers every sector,
+ * C24 covers C24.10), the lower verdict and the common countries (none given = the whole scope).
+ */
+const overlap = (a: SectorLabel, b: SectorLabel): SectorLabel | null => {
+  const [deep, shallow] = naceDepth(a.naceCode) >= naceDepth(b.naceCode) ? [a, b] : [b, a];
+  const covers = shallow.naceCode === HORIZONTAL || naceLineage(deep.naceCode).includes(shallow.naceCode);
+  const countries =
+    a.countries && b.countries
+      ? a.countries.filter((c) => b.countries?.includes(c))
+      : (a.countries ?? b.countries);
+  if (!covers || countries?.length === 0) return null;
+  const verdict = verdictRank(a.verdict) <= verdictRank(b.verdict) ? a.verdict : b.verdict;
+  return { ...deep, verdict, ...(countries ? { countries } : {}) };
+};
+
+/** Index sets of size k out of 0..n-1. */
+const subsetsOf = (n: number, k: number): readonly (readonly number[])[] =>
+  k === 0
+    ? [[]]
+    : n < k
+      ? []
+      : [...subsetsOf(n - 1, k), ...subsetsOf(n - 1, k - 1).map((s) => [...s, n - 1])];
+
+/**
+ * Majority consensus of independent classification runs of one group: a sector is kept when more than half of the
+ * runs cover it (the overlap of their labels: deeper code, common countries), with the verdict a majority supports
+ * (the median: relevant only if most runs say relevant). Two runs must agree; with three, two of them decide. Damps
+ * run-to-run variance of a model: a sector or a verdict only one run gives does not decide the result. Pure.
  */
 export const consensusLabels = (runs: readonly (readonly SectorLabel[])[]): readonly SectorLabel[] => {
-  const [first = [], ...others] = runs;
-  const related = (a: string, b: string) =>
-    a === b ||
-    (a !== HORIZONTAL && b !== HORIZONTAL && (naceLineage(a).includes(b) || naceLineage(b).includes(a)));
-  return first.flatMap((l) => {
-    const best = others.map((run) =>
-      Math.max(-1, ...run.filter((o) => related(l.naceCode, o.naceCode)).map((o) => verdictRank(o.verdict))),
-    );
-    const rank = Math.min(verdictRank(l.verdict), ...best);
-    return rank <= 0 ? [] : [{ ...l, verdict: VERDICTS[rank] ?? l.verdict }];
+  const majority = Math.floor(runs.length / 2) + 1;
+  const agreed = subsetsOf(runs.length, Math.min(majority, runs.length)).flatMap((subset) =>
+    subset
+      .map((i) => runs[i] ?? [])
+      .reduce((common, run) => common.flatMap((l) => run.flatMap((o) => overlap(l, o) ?? []))),
+  );
+  // Strongest verdict per code and countries (a code several majorities agree on appears once).
+  const key = (l: SectorLabel) => `${l.naceCode}|${[...(l.countries ?? [])].sort().join(',')}`;
+  return [...Map.groupBy(agreed, key).values()]
+    .map((same) => same.reduce((a, b) => (verdictRank(b.verdict) > verdictRank(a.verdict) ? b : a)))
+    .filter((l) => l.verdict !== 'not_relevant');
+};
+
+/** Whether runs gave the same sectors and verdicts (then a tie-breaking run is not needed). Pure. */
+export const runsAgree = (runs: readonly (readonly SectorLabel[])[]): boolean => {
+  const agreed = new Set(consensusLabels(runs).map((l) => `${l.naceCode}:${l.verdict}`));
+  return runs.every((run) => {
+    const own = new Set(run.map((l) => `${l.naceCode}:${l.verdict}`));
+    return own.size === agreed.size && [...own].every((l) => agreed.has(l));
   });
 };
 

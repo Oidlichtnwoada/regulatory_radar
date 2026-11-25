@@ -128,7 +128,7 @@ What moved the numbers most:
 1. Concept-specific exclusions of misleading phrases ("Iron Curtain", "retail investors", "industrial consumers", "consumer protection" as a bare topic). Making them per concept fixed the last retail false alarm (`EU-HYS-0031`, retail investment) and the missed gas-demand vote for metals (`EU-EP-0034`).
 2. Capping at borderline: information-only items, groups without any duty (EU Taxonomy screening criteria, voluntary schemes), and concepts that touch only a minority of a sector (emissions trading and gas use of large food plants, reusable crates and pallets, pack sizes).
 
-The honest test is live data. The online run (`scripts/eval.sh online`) needs a Mistral or OpenAI key and was not run for this submission. Its wiring is covered by an integration test with a scripted LLM.
+**Online (LLM) run:** with OpenAI (`gpt-6-luna`, `text-embedding-3-large`), the latest complete fresh run (`scripts/eval.sh online`) reaches recall and precision 1.00 on every profile of both sets, perfect grouping, and exact tiers for `agrifood_pl` and `retail_es` on the extended set. One tier is still off for `metals_at` (`AT-PAR-0016`, borderline instead of relevant). Results, setup, how the score developed and cost: [`docs/eval/online-openai.md`](docs/eval/online-openai.md). Mistral was not run. The honest test is still live data.
 
 ## Tests
 

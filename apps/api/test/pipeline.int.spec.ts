@@ -422,6 +422,7 @@ describe('pipeline in online mode with scripted LLM providers', () => {
     engine,
     retryAfterSeconds,
     embeddingEngine: 'openai:hash',
+    translationEngine: 'openai:scripted',
     embeddingDimensions: 3072,
     maxSteps: 4,
     batchSize: 100,

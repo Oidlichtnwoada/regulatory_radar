@@ -334,12 +334,19 @@ export interface PendingSnapshot {
 /**
  * Latest non-retired snapshots without a classification of `engine`, newest first. A snapshot whose
  * agent run failed keeps its fallback classification and is retried with backoff (see retryDue), at
- * most MAX_ATTEMPTS times.
+ * most MAX_ATTEMPTS times. A group waits until every member has a translation and an embedding result of the
+ * engines in effect (any status, so offline "skipped" and failed ones count): its snapshot changes once the
+ * translation arrives, and classifying it before would be paid twice.
  */
 export const pendingClassifications = async (
   db: PrismaService,
   engine: string,
-  opts: { readonly limit: number; readonly retryAfterSeconds: number },
+  opts: {
+    readonly limit: number;
+    readonly retryAfterSeconds: number;
+    readonly translationEngine: string;
+    readonly embeddingEngine: string;
+  },
 ): Promise<readonly PendingSnapshot[]> =>
   db.$queryRaw<PendingSnapshot[]>`
     SELECT s.id, s.group_key, s.jurisdiction, s.member_ids FROM (
@@ -351,6 +358,10 @@ export const pendingClassifications = async (
       FROM classification c WHERE c.snapshot_id = s.id AND c.engine = ${engine}) c
     WHERE NOT s.retired AND c.done = 0
       AND ${retryDue(Prisma.sql`c.failures`, Prisma.sql`c.last_failure`, opts.retryAfterSeconds)}
+      AND NOT EXISTS (
+        SELECT 1 FROM unnest(s.member_ids) m(id)
+        WHERE NOT EXISTS (SELECT 1 FROM translation t WHERE t.finding_id = m.id AND t.engine = ${opts.translationEngine})
+           OR NOT EXISTS (SELECT 1 FROM embedding e WHERE e.finding_id = m.id AND e.engine = ${opts.embeddingEngine}))
     ORDER BY s.latest_published DESC, s.group_key LIMIT ${opts.limit}`;
 
 /** Latest non-retired snapshots of the given groups (classification previews). */

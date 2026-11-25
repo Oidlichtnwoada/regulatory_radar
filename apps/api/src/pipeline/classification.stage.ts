@@ -10,6 +10,7 @@ import {
   expandLabels,
   keepTracked,
   ruleMatches,
+  runsAgree,
   type SectorLabel,
   safetyNet,
   statedLabels,
@@ -115,7 +116,8 @@ How to work:
    payment at the checkout, cash services, deposit refunds, price and fee information, unsold stock) are relevant for
    retail trade even when the main addressee is a bank, payment provider or producer; rules on waste and secondary raw
    materials (scrap, recycled material) hit the waste operators and the industries that buy, ship or melt them (steel
-   mills and foundries); energy and carbon-cost rules for "energy-intensive" industries or "large industrial
+   mills and foundries): when such a rule puts records, notifications or permits on whoever ships or receives the
+   material, the sectors that regularly do so must act themselves, so they are relevant, not borderline; energy and carbon-cost rules for "energy-intensive" industries or "large industrial
    consumers" hit the energy-intensive industries (basic metals, chemicals, cement, lime, glass, ceramics, pulp and
    paper, refining), not every manufacturer. Product rules often exclude whole product groups (food, feed, medicines,
    vehicles, ...): check the scope and exclusions of the act before labelling the producers of a product group.
@@ -189,8 +191,10 @@ export const naceLabelProblems = (
 
 /** Options of the classification stage. */
 export type ClassificationOptions = AgentOptions & {
-  /** Independent agent runs per group whose labels must agree (consensusLabels); 1 = a single run. */
+  /** Independent agent runs per group; a majority decides (consensusLabels), a tie adds one run. 1 = a single run. */
   readonly runs?: number;
+  /** Translation engine whose results a group's members need before it is classified. */
+  readonly translationEngine: string;
 };
 
 /**
@@ -275,6 +279,8 @@ export const runClassificationStage = async (
   const pending = await pendingClassifications(db, engine, {
     limit: opts.batchSize,
     retryAfterSeconds: opts.retryAfterSeconds,
+    translationEngine: opts.translationEngine,
+    embeddingEngine: opts.embeddingEngine,
   });
   const results = await mapLimit(pending, chat ? opts.concurrency : 1, async (s) => {
     const members = await membersByIds(db, s.member_ids);
@@ -432,8 +438,11 @@ Precedents (similar procedures already labelled): ${JSON.stringify(precedents)}`
         throw new Error(`no usable NACE Rev. 2.1 label: ${valid.dropped.join(' ').slice(0, 150)}`);
       return { answer, trace, ...valid };
     });
-  // Independent runs; their labels must agree (one failed run fails the classification, which is retried).
-  const runs = await Promise.all(Array.from({ length: Math.max(1, opts.runs ?? 1) }, run));
+  // Independent runs; a majority decides (one failed run fails the classification, which is retried). When an even
+  // number of runs disagrees, one more run breaks the tie, so the extra cost only arises where the model wavers.
+  const first = await Promise.all(Array.from({ length: Math.max(1, opts.runs ?? 1) }, run));
+  const tied = first.length % 2 === 0 && !runsAgree(first.map((r) => r.kept));
+  const runs = tied ? [...first, await run()] : first;
   const kept = consensusLabels(runs.map((r) => r.kept));
   // A keyword trap any run caught stays rejected.
   const rejected = runs.flatMap((r) => r.rejected);

@@ -42,7 +42,7 @@ export class PipelineService {
   ) {}
 
   /** Options shared by the agent stages (without the engine id). */
-  private agentOptions(signal?: AbortSignal): Omit<ClassificationOptions, 'engine'> {
+  private agentOptions(signal?: AbortSignal): Omit<ClassificationOptions, 'engine' | 'translationEngine'> {
     const e = engines(this.ai);
     return {
       retryAfterSeconds: this.env.PIPELINE_RETRY_SECONDS,
@@ -71,6 +71,7 @@ export class PipelineService {
         ...this.agentOptions(),
         engine: e.classification,
         runs: this.env.CLASSIFICATION_AGENT_RUNS,
+        translationEngine: e.translation,
       },
       groupKeys,
     );
@@ -177,6 +178,7 @@ export class PipelineService {
         ...agent,
         engine: e.classification,
         runs: this.env.CLASSIFICATION_AGENT_RUNS,
+        translationEngine: e.translation,
       }),
     );
     const stats = { translation, embedding, naceEmbedding, grouping, classification };

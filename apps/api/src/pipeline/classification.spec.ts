@@ -6,6 +6,7 @@ import {
   consensusLabels,
   keepTracked,
   ruleMatches,
+  runsAgree,
   type SectorLabel,
   safetyNet,
 } from '../domain/classifier.js';
@@ -195,25 +196,37 @@ describe('classification engine id', () => {
 });
 
 describe('consensus of independent classification runs', () => {
-  it('keeps a label only when every run has it, its ancestor or descendant, with the lowest verdict', () => {
-    const kept = consensusLabels([
-      [
-        label('C24', 'relevant'),
-        label('C10', 'borderline'),
-        label('G47', 'relevant'),
-        label('*', 'relevant'),
-      ],
-      [label('C24.10', 'relevant'), label('G47', 'borderline'), label('*', 'relevant')],
-    ]);
-    expect(kept.map((l) => `${l.naceCode}:${l.verdict}`)).toEqual([
-      'C24:relevant',
+  const show = (labels: readonly SectorLabel[]) => labels.map((l) => `${l.naceCode}:${l.verdict}`);
+
+  it('two runs: keeps the sectors both cover (deeper code; * covers every code) with the lower verdict', () => {
+    const runs = [
+      [label('C24', 'relevant'), label('C10', 'borderline'), label('G47', 'relevant')],
+      [label('C24.10', 'relevant'), label('*', 'borderline')],
+    ];
+    // Run 2's "* borderline" also covers C24: both agree on C24 borderline and on C24.10 relevant.
+    expect(show(consensusLabels(runs))).toEqual([
+      'C24.10:relevant',
+      'C24:borderline',
+      'C10:borderline',
       'G47:borderline',
-      '*:relevant',
     ]);
+    expect(runsAgree(runs)).toBe(false);
+    expect(runsAgree([[label('C24', 'relevant')], [label('C24', 'relevant')]])).toBe(true);
   });
 
-  it('does not let the horizontal code confirm a sector, and a single run is unchanged', () => {
-    expect(consensusLabels([[label('C24', 'relevant')], [label('*', 'relevant')]])).toEqual([]);
-    expect(consensusLabels([[label('C24', 'relevant')]])).toEqual([label('C24', 'relevant')]);
+  it('three runs: a majority decides the sector and the verdict (median)', () => {
+    const runs = [
+      [label('C24', 'relevant'), label('C10', 'borderline')],
+      [label('C24', 'borderline')],
+      [label('C24', 'relevant'), label('G47', 'relevant')],
+    ];
+    expect(show(consensusLabels(runs))).toEqual(['C24:relevant']);
+  });
+
+  it('a single run is unchanged and disjoint countries do not agree', () => {
+    expect(show(consensusLabels([[label('C24', 'relevant')]]))).toEqual(['C24:relevant']);
+    const at = { ...label('C24', 'relevant'), countries: ['AT'] };
+    const pl = { ...label('C24', 'relevant'), countries: ['PL'] };
+    expect(consensusLabels([[at], [pl]])).toEqual([]);
   });
 });
