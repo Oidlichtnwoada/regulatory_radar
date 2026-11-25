@@ -56,6 +56,8 @@ const envSchema = z.object({
   /** Independent classification agent runs per group whose labels must agree (1 = a single run). */
   CLASSIFICATION_AGENT_RUNS: int(2),
   LLM_CONCURRENCY: int(3),
+  /** Minimum gap between two requests to the provider (ms; 0 = none), for plans with a per-second rate limit. */
+  LLM_MIN_REQUEST_INTERVAL_MS: z.coerce.number().int().nonnegative().default(0),
   PIPELINE_INTERVAL_SECONDS: int(15),
   PIPELINE_BATCH_SIZE: int(25),
   PIPELINE_RETRY_SECONDS: int(300),

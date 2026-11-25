@@ -31,19 +31,59 @@ export const embeddingDimensions = (provider: LlmProviderId, model: string): num
   return dims;
 };
 
-/** HTTP client of the Mistral SDK whose requests time out (the LangChain Mistral classes have no timeout option). */
-const mistralHttpClient = (): HTTPClient =>
-  new HTTPClient({
-    fetcher: (input, init) =>
-      fetch(input, {
-        ...init,
-        signal: AbortSignal.any([
-          AbortSignal.timeout(LLM_REQUEST_TIMEOUT_MS),
-          ...(init?.signal ? [init.signal] : []),
-          ...(input instanceof Request ? [input.signal] : []),
-        ]),
-      }),
-  });
+/** Waits after 429 answers without Retry-After (ms); rejected requests are not billed, a lost agent run is. */
+export const RATE_LIMIT_BACKOFF_MS: readonly number[] = [1_000, 2_000, 4_000, 8_000, 16_000, 30_000];
+
+/** A fetch function (the shape the provider SDKs and postJson call). */
+type Fetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+
+/** Wait before the next attempt: the provider's Retry-After (seconds) when given, else the backoff step. Pure. */
+export const retryDelayMs = (res: Pick<Response, 'headers'>, attempt: number): number => {
+  const header = Number(res.headers.get('retry-after'));
+  return Number.isFinite(header) && header > 0
+    ? header * 1000
+    : (RATE_LIMIT_BACKOFF_MS[attempt] ?? RATE_LIMIT_BACKOFF_MS.at(-1) ?? 0);
+};
+
+/**
+ * Provider fetch that respects rate limits: requests leave at least `minIntervalMs` apart (one shared queue per
+ * provider, so stages and agent runs running in parallel do not burst past a per-second limit), and a 429 is
+ * retried here with backoff, so an agent run survives instead of being thrown away with the tokens it already used.
+ * Each attempt times out after LLM_REQUEST_TIMEOUT_MS.
+ */
+export const rateLimitedFetch = (minIntervalMs: number, base: Fetch = (i, init) => fetch(i, init)): Fetch => {
+  // Contained mutable state: the time slot of the last request, shared by every caller of this provider.
+  let next = 0;
+  const slot = async (): Promise<void> => {
+    const now = Date.now();
+    const at = Math.max(now, next);
+    next = at + minIntervalMs;
+    if (at > now) await new Promise((r) => setTimeout(r, at - now));
+  };
+  const attempt = async (
+    input: string | URL | Request,
+    init: RequestInit | undefined,
+    n: number,
+  ): Promise<Response> => {
+    await slot();
+    const res = await base(input instanceof Request ? input.clone() : input, {
+      ...init,
+      signal: AbortSignal.any([
+        AbortSignal.timeout(LLM_REQUEST_TIMEOUT_MS),
+        ...(init?.signal ? [init.signal] : []),
+        ...(input instanceof Request ? [input.signal] : []),
+      ]),
+    });
+    if (res.status !== 429 || n >= RATE_LIMIT_BACKOFF_MS.length) return res;
+    await res.body?.cancel();
+    await new Promise((r) => setTimeout(r, retryDelayMs(res, n)));
+    return attempt(input, init, n + 1);
+  };
+  return (input, init) => attempt(input, init, 0);
+};
+
+/** HTTP client of the Mistral SDK on a rate-limited fetch (the LangChain Mistral classes have no timeout option). */
+const mistralHttpClient = (fetcher: Fetch): HTTPClient => new HTTPClient({ fetcher });
 
 /** One cited web page of a provider-native web search. */
 export interface WebSource {
@@ -110,12 +150,11 @@ interface ProviderParts {
 }
 
 /** POSTs JSON with a bearer key and returns the parsed body (throws on HTTP errors). */
-const postJson = async (url: string, apiKey: string, body: unknown): Promise<unknown> => {
-  const res = await fetch(url, {
+const postJson = async (send: Fetch, url: string, apiKey: string, body: unknown): Promise<unknown> => {
+  const res = await send(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(LLM_REQUEST_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`${url}: HTTP ${res.status} ${(await res.text()).slice(0, 300)}`);
   return res.json();
@@ -137,9 +176,9 @@ const sourcesOf = (items: readonly Json[]): readonly WebSource[] => [
 
 /** OpenAI Responses API with the built-in `web_search` tool: output_text plus url_citation annotations. */
 const openAiWebSearch =
-  (env: Env) =>
+  (env: Env, send: Fetch) =>
   async (query: string): Promise<WebSearchResult> => {
-    const body = (await postJson(`${env.OPENAI_BASE_URL}/responses`, env.OPENAI_API_KEY, {
+    const body = (await postJson(send, `${env.OPENAI_BASE_URL}/responses`, env.OPENAI_API_KEY, {
       model: env.OPENAI_CHAT_MODEL,
       input: query,
       tools: [{ type: 'web_search' }],
@@ -153,9 +192,9 @@ const openAiWebSearch =
 
 /** Mistral Conversations API with the built-in `web_search` tool: text chunks plus tool_reference chunks. */
 const mistralWebSearch =
-  (env: Env) =>
+  (env: Env, send: Fetch) =>
   async (query: string): Promise<WebSearchResult> => {
-    const body = (await postJson(`${env.MISTRAL_SERVER_URL}/v1/conversations`, env.MISTRAL_API_KEY, {
+    const body = (await postJson(send, `${env.MISTRAL_SERVER_URL}/v1/conversations`, env.MISTRAL_API_KEY, {
       model: env.MISTRAL_CHAT_MODEL,
       inputs: query,
       tools: [{ type: 'web_search' }],
@@ -172,9 +211,9 @@ const mistralWebSearch =
     };
   };
 
-/** One factory per provider: adding a provider is one entry here plus its env variables. */
-const FACTORIES: Readonly<Record<LlmProviderId, (env: Env) => ProviderParts>> = {
-  mistral: (env) => ({
+/** One factory per provider: adding a provider is one entry here plus its env variables. `send` is the provider's rate-limited fetch. */
+const FACTORIES: Readonly<Record<LlmProviderId, (env: Env, send: Fetch) => ProviderParts>> = {
+  mistral: (env, send) => ({
     chatModel: env.MISTRAL_CHAT_MODEL,
     chat: new ChatMistralAI({
       model: env.MISTRAL_CHAT_MODEL,
@@ -182,10 +221,10 @@ const FACTORIES: Readonly<Record<LlmProviderId, (env: Env) => ProviderParts>> = 
       serverURL: env.MISTRAL_SERVER_URL,
       temperature: 0,
       maxRetries: 3,
-      httpClient: mistralHttpClient(),
+      httpClient: mistralHttpClient(send),
     }),
     // The EU endpoint keeps inference in the EU; its only tool is function calling, so no built-in web search.
-    webSearch: mistralRegional(env) ? null : mistralWebSearch(env),
+    webSearch: mistralRegional(env) ? null : mistralWebSearch(env, send),
     embedding: {
       model: env.MISTRAL_EMBED_MODEL,
       dimensions: embeddingDimensions('mistral', env.MISTRAL_EMBED_MODEL),
@@ -198,11 +237,12 @@ const FACTORIES: Readonly<Record<LlmProviderId, (env: Env) => ProviderParts>> = 
         apiKey: env.MISTRAL_API_KEY,
         serverURL: env.MISTRAL_SERVER_URL,
         maxRetries: 3,
-        httpClient: mistralHttpClient(),
+        httpClient: mistralHttpClient(send),
       }),
     },
   }),
-  openai: (env) => ({
+  // The OpenAI SDK paces and retries its own requests (Retry-After); `send` serves the web search only.
+  openai: (env, send) => ({
     chatModel: env.OPENAI_CHAT_MODEL,
     // No temperature: current OpenAI reasoning models do not document it; reproducibility comes from stored results.
     // Responses API: reasoning models (e.g. gpt-6-luna) refuse function tools on /v1/chat/completions.
@@ -214,7 +254,7 @@ const FACTORIES: Readonly<Record<LlmProviderId, (env: Env) => ProviderParts>> = 
       maxRetries: 3,
       timeout: LLM_REQUEST_TIMEOUT_MS,
     }),
-    webSearch: openAiWebSearch(env),
+    webSearch: openAiWebSearch(env, send),
     embedding: {
       model: env.OPENAI_EMBED_MODEL,
       dimensions: embeddingDimensions('openai', env.OPENAI_EMBED_MODEL),
@@ -235,7 +275,7 @@ const FACTORIES: Readonly<Record<LlmProviderId, (env: Env) => ProviderParts>> = 
 export const createAiProviders = (env: Env): AiProviders => {
   const { provider } = llmSettings(env);
   if (provider === 'none') return { chat: null, embedding: null };
-  const parts = FACTORIES[provider](env);
+  const parts = FACTORIES[provider](env, rateLimitedFetch(env.LLM_MIN_REQUEST_INTERVAL_MS));
   return {
     chat: {
       id: provider,

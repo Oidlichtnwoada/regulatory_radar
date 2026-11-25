@@ -2,7 +2,7 @@ import { HumanMessage } from '@langchain/core/messages';
 import { ChatOpenAI } from '@langchain/openai';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { llmSettings, loadEnv } from '../config/env.js';
-import { createAiProviders, engines } from './providers.js';
+import { createAiProviders, engines, RATE_LIMIT_BACKOFF_MS, rateLimitedFetch } from './providers.js';
 
 describe('one ML/AI provider behind LangChain interfaces', () => {
   it.each([
@@ -31,6 +31,26 @@ describe('one ML/AI provider behind LangChain interfaces', () => {
     const chat = createAiProviders(loadEnv({ LLM_PROVIDER: 'openai', OPENAI_API_KEY: 'k' })).chat?.chat;
     expect(chat).toBeInstanceOf(ChatOpenAI);
     expect((chat as ChatOpenAI).useResponsesApi).toBe(true);
+  });
+
+  it('retries 429 answers (Retry-After first) and spaces requests apart, so an agent run survives a rate limit', async () => {
+    vi.useFakeTimers();
+    const answers = [
+      new Response('', { status: 429, headers: { 'retry-after': '2' } }),
+      new Response('', { status: 429 }),
+      new Response('ok'),
+    ];
+    const sent: number[] = [];
+    const send = rateLimitedFetch(500, () => {
+      sent.push(Date.now());
+      return Promise.resolve(answers.shift() ?? new Response('ok'));
+    });
+    const res = send('https://example.test', { method: 'POST', body: '{}' });
+    await vi.runAllTimersAsync();
+    expect(await (await res).text()).toBe('ok');
+    const gaps = sent.slice(1).map((t, i) => t - (sent[i] ?? 0));
+    expect(gaps).toEqual([2_000, RATE_LIMIT_BACKOFF_MS[1]]);
+    vi.useRealTimers();
   });
 
   it('falls back to offline when the selected provider has no key', () => {

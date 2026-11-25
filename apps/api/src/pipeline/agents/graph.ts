@@ -97,6 +97,28 @@ const toTrace = (messages: readonly BaseMessage[]): readonly TraceStep[] =>
       : {}),
   }));
 
+/** Schema problems as one short line each, with the path first (`labels.2.basis: Invalid option: ...`). */
+export const schemaProblems = (error: z.ZodError): string =>
+  error.issues
+    .slice(0, 8)
+    .map((i) => `${i.path.join('.') || '(answer)'}: ${i.message}`)
+    .join('; ');
+
+/**
+ * The model's output behind a parser error (LangChain's OutputParserException carries it as `llmOutput`), parsed as
+ * JSON where possible, so the schema check can name the exact problem for a correction round. Other errors
+ * (network, rate limit, abort) are rethrown.
+ */
+export const unparsedOutput = (e: unknown): unknown => {
+  const output = (e as { llmOutput?: unknown } | null)?.llmOutput;
+  if (typeof output !== 'string') throw e;
+  try {
+    return JSON.parse(output);
+  } catch {
+    return output;
+  }
+};
+
 /**
  * LangGraph ReAct loop shared by all agents: `agent` (model with tools bound) <-> `tools` until the
  * model stops calling tools or the step budget is used, then a structured final answer.
@@ -148,12 +170,23 @@ export const runAgent = async <S extends z.ZodType>(
     round: number,
     corrections: readonly TraceStep[],
   ): Promise<{ answer: z.infer<S>; corrections: readonly TraceStep[] }> => {
-    const answer = (await structured.invoke([...messages], { signal })) as z.infer<S>;
-    const problems = run.validate?.(answer) ?? [];
-    if (problems.length === 0 || round >= (run.maxCorrections ?? 2)) return { answer, corrections };
+    const raw = await structured.invoke([...messages], { signal }).catch(unparsedOutput);
+    // A model may answer in text or miss a field: that is a problem to correct, not a lost run.
+    const parsed = run.schema.safeParse(raw);
+    const problems = parsed.success
+      ? (run.validate?.(parsed.data) ?? [])
+      : [
+          raw === undefined || raw === null
+            ? 'You gave no answer: call the final_answer tool with the complete answer.'
+            : `The answer does not match the schema: ${schemaProblems(parsed.error)}`,
+        ];
+    const last = round >= (run.maxCorrections ?? 2);
+    if (!parsed.success && last)
+      throw new Error(`no valid final answer after ${round + 1} attempts: ${problems[0]}`);
+    if (parsed.success && (problems.length === 0 || last)) return { answer: parsed.data, corrections };
     const feedback = `Your answer has these problems:\n- ${problems.join('\n- ')}\nCorrect them and give the complete answer again.`;
     return answerWithCorrections(
-      [...messages, new AIMessage(JSON.stringify(answer)), new HumanMessage(feedback)],
+      [...messages, new AIMessage(JSON.stringify(raw ?? null)), new HumanMessage(feedback)],
       round + 1,
       [...corrections, { type: 'validation', content: feedback.slice(0, 1500) }],
     );

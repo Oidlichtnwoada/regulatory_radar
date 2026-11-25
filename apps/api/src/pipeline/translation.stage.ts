@@ -19,8 +19,8 @@ const WithSummary = z.object({
   summaryEn: z.string().min(1).describe('Faithful English translation of the summary'),
 });
 
-/** Structured output for an item without a summary. */
-const TitleOnly = z.object({ titleEn, summaryEn: z.null().describe('Always null: the item has no summary') });
+/** Structured output for an item without a summary: the title only (models omit a field that must be null). */
+const TitleOnly = z.object({ titleEn });
 
 /** Prompt of the translator; legal terms are translated faithfully, nothing is added. */
 const prompt = (m: GroupMember): string =>
@@ -61,7 +61,9 @@ export const runTranslationStage = async (
       return { ...base, status: 'identity' as const, titleEn: m.title, summaryEn: m.summary };
     if (!translators) return { ...base, status: 'skipped' as const, titleEn: null, summaryEn: null };
     try {
-      const out = await (m.summary ? translators.withSummary : translators.titleOnly).invoke(prompt(m));
+      const out = m.summary
+        ? await translators.withSummary.invoke(prompt(m))
+        : { ...(await translators.titleOnly.invoke(prompt(m))), summaryEn: null };
       return { ...base, status: 'translated' as const, titleEn: out.titleEn, summaryEn: out.summaryEn };
     } catch (e) {
       return {
