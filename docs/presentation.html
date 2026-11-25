@@ -142,6 +142,16 @@
 
 <section class="slide">
   <p class="kicker">Underneath</p>
+  <h2>Matching country × NACE in one indexed query</h2>
+  <div class="grid">
+    <div class="card"><h3>Labels, not profiles</h3>One row per group × country × NACE code; EU groups get all 27 countries. The profile only filters.</div>
+    <div class="card"><h3>NACE hierarchy</h3><code>C24</code> → <code>NACE.C.C24.*</code> + <code>NACE.C</code> + <code>NACE</code>: own branch up and down, never siblings.</div>
+    <div class="card"><h3>Fast reads</h3>Materialized views refreshed after each cycle; GiST on <code>(country, nace_path)</code>; scope, match, rank and page in one SQL query.</div>
+  </div>
+</section>
+
+<section class="slide">
+  <p class="kicker">Underneath</p>
   <h2>How the list is ordered</h2>
   <p><span class="tier t1">Open window</span> <span class="tier t2">Upcoming vote</span> <span class="tier t3">Standstill</span> In procedure <span class="tier t5">Adopted</span> Information</p>
   <div class="grid">

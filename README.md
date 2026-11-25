@@ -68,6 +68,13 @@ The UI shows the API's order unchanged. One immutable SQL function, `radar_actio
 
 The default view shows relevant + borderline for the selected country (plus EU level) and NACE codes at any level (`C`, `C24`, `C24.4` match hierarchically via `ltree`). **NEW** marks groups first seen after the last "Mark all as seen".
 
+## Matching and fast retrieval
+
+- **Labels are profile-independent:** one row per (group × country × NACE code). EU groups get all 27 countries, national groups only their own.
+- **Country:** EU-level groups plus groups of the selected countries.
+- **NACE:** codes are `ltree` paths (`C24.4` → `NACE.C.C24.C24_4`). `C24` matches `NACE.C.C24.*` (itself and below), `NACE.C` (section) and `NACE` (all sectors); never siblings like `C25`. The strongest matching verdict wins.
+- **Fast reads:** the UI never reads the append-only tables. Materialized views (latest group snapshot, its labels) are refreshed concurrently after each pipeline cycle; a GiST index on `(country, nace_path)` answers the match, and one SQL query does scope → match → rank → page, including the denominator.
+
 ## Evaluation
 
 ```bash
