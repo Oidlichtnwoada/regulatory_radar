@@ -24,7 +24,7 @@ export interface AgentOptions {
   readonly batchSize: number;
   /** Parallel agent runs. */
   readonly concurrency: number;
-  /** Wait before retrying a failed agent run; every further retry waits four times longer. */
+  /** Wait before retrying a failed agent run; every further retry waits five times longer. */
   readonly retryAfterSeconds: number;
   /** Whether fetch_url and web_search may use the internet. */
   readonly internet: boolean;

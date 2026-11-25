@@ -97,26 +97,65 @@ const toTrace = (messages: readonly BaseMessage[]): readonly TraceStep[] =>
       : {}),
   }));
 
-/** Schema problems as one short line each, with the path first (`labels.2.basis: Invalid option: ...`). */
-export const schemaProblems = (error: z.ZodError): string =>
-  error.issues
-    .slice(0, 8)
-    .map((i) => `${i.path.join('.') || '(answer)'}: ${i.message}`)
-    .join('; ');
+/** Value at a schema path of an answer (for naming what the model sent). */
+const valueAt = (value: unknown, path: readonly PropertyKey[]): unknown =>
+  path.reduce<unknown>(
+    (v, k) => (v && typeof v === 'object' ? (v as Record<PropertyKey, unknown>)[k] : undefined),
+    value,
+  );
 
 /**
- * The model's output behind a parser error (LangChain's OutputParserException carries it as `llmOutput`), parsed as
- * JSON where possible, so the schema check can name the exact problem for a correction round. Other errors
- * (network, rate limit, abort) are rethrown.
+ * Schema problems as one short line each: path, problem and the value the model sent
+ * (`labels.2.basis: Invalid option: ... (you sent "marginal")`).
  */
-export const unparsedOutput = (e: unknown): unknown => {
-  const output = (e as { llmOutput?: unknown } | null)?.llmOutput;
-  if (typeof output !== 'string') throw e;
+export const schemaProblems = (error: z.ZodError, answer?: unknown): string =>
+  error.issues
+    .slice(0, 8)
+    .map((i) => {
+      const sent = valueAt(answer, i.path);
+      const shown = sent === undefined ? '' : ` (you sent ${JSON.stringify(sent).slice(0, 80)})`;
+      return `${i.path.join('.') || '(answer)'}: ${i.message}${shown}`;
+    })
+    .join('; ');
+
+/** A final answer as the agents read it: the candidate value, plus what the model sent when there was none. */
+export interface FinalOutput {
+  /** Parsed answer, the tool call's arguments, or a JSON object from the text; undefined when there is nothing. */
+  readonly value: unknown;
+  /** Stop reason and start of the text, for the correction request and the error. */
+  readonly note: string;
+}
+
+/** First JSON object in a text (models sometimes answer in text instead of calling the tool), or undefined. */
+const jsonIn = (text: string): unknown => {
+  const from = text.indexOf('{');
+  const to = text.lastIndexOf('}');
+  if (from < 0 || to <= from) return undefined;
   try {
-    return JSON.parse(output);
+    return JSON.parse(text.slice(from, to + 1));
   } catch {
-    return output;
+    return undefined;
   }
+};
+
+/**
+ * Reads a structured output requested with `includeRaw`. LangChain's parser yields nothing when the model answers
+ * in text, names the call differently or misses a field; then the raw tool call arguments or a JSON object in the
+ * text are taken, so the schema check can name the exact problem for a correction round instead of losing the run.
+ */
+export const finalOutputOf = (out: unknown): FinalOutput => {
+  const o = out as { raw?: unknown; parsed?: unknown } | null | undefined;
+  if (!o || typeof o !== 'object' || !('raw' in o) || !('parsed' in o)) return { value: out, note: '' };
+  if (o.parsed !== null && o.parsed !== undefined) return { value: o.parsed, note: '' };
+  const raw = AIMessage.isInstance(o.raw) ? o.raw : null;
+  const text = typeof raw?.content === 'string' ? raw.content : JSON.stringify(raw?.content ?? '');
+  const reason = String(
+    raw?.response_metadata?.finish_reason ?? raw?.response_metadata?.stop_reason ?? 'unknown',
+  );
+  return {
+    value: raw?.tool_calls?.[0]?.args ?? jsonIn(text),
+    note: `stop reason ${reason}, text: ${JSON.stringify(text.slice(0, 200))}`,
+  };
 };
 
 /**
@@ -158,7 +197,7 @@ export const runAgent = async <S extends z.ZodType>(
   );
   const trace = toTrace(final.messages);
   // Research is passed as plain notes: providers reject tool results whose tool calls were removed.
-  const structured = run.chat.withStructuredOutput(run.schema, { name: 'final_answer' });
+  const structured = run.chat.withStructuredOutput(run.schema, { name: 'final_answer', includeRaw: true });
   const request = [
     system,
     new HumanMessage(
@@ -170,15 +209,15 @@ export const runAgent = async <S extends z.ZodType>(
     round: number,
     corrections: readonly TraceStep[],
   ): Promise<{ answer: z.infer<S>; corrections: readonly TraceStep[] }> => {
-    const raw = await structured.invoke([...messages], { signal }).catch(unparsedOutput);
+    const { value: raw, note } = finalOutputOf(await structured.invoke([...messages], { signal }));
     // A model may answer in text or miss a field: that is a problem to correct, not a lost run.
     const parsed = run.schema.safeParse(raw);
     const problems = parsed.success
       ? (run.validate?.(parsed.data) ?? [])
       : [
           raw === undefined || raw === null
-            ? 'You gave no answer: call the final_answer tool with the complete answer.'
-            : `The answer does not match the schema: ${schemaProblems(parsed.error)}`,
+            ? `You gave no answer (${note}): call the final_answer tool with the complete answer.`
+            : `The answer does not match the schema: ${schemaProblems(parsed.error, raw)}`,
         ];
     const last = round >= (run.maxCorrections ?? 2);
     if (!parsed.success && last)

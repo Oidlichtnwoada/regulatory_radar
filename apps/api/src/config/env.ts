@@ -60,7 +60,7 @@ const envSchema = z.object({
   LLM_MIN_REQUEST_INTERVAL_MS: z.coerce.number().int().nonnegative().default(0),
   PIPELINE_INTERVAL_SECONDS: int(15),
   PIPELINE_BATCH_SIZE: int(25),
-  PIPELINE_RETRY_SECONDS: int(300),
+  PIPELINE_RETRY_SECONDS: int(60),
   SOURCE_FILE_ENABLED: bool(true),
   SOURCE_FILE_PATH: z.string().default('items.json'),
   SOURCE_FILE_SINCE: isoDate,

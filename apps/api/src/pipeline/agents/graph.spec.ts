@@ -1,11 +1,10 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { AIMessage } from '@langchain/core/messages';
-import { OutputParserException } from '@langchain/core/output_parsers';
 import { RunnableLambda } from '@langchain/core/runnables';
 import { tool } from '@langchain/core/tools';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { MAX_TOOL_CALLS_PER_TURN, runAgent, runToolCalls, unparsedOutput } from './graph.js';
+import { finalOutputOf, MAX_TOOL_CALLS_PER_TURN, runAgent, runToolCalls } from './graph.js';
 
 describe('agent tool calls', () => {
   const echo = tool(async ({ n }: { n: number }) => `ran ${n}`, {
@@ -52,13 +51,29 @@ describe('final answer of an agent run', () => {
     expect(trace.at(-1)?.content).toMatch(/call the final_answer tool/);
   });
 
-  it('names the exact schema problem when the provider parser rejects an answer (e.g. an omitted field)', async () => {
-    const rejected = new OutputParserException('Failed to parse.', '{"other":1}');
-    expect(unparsedOutput(rejected)).toEqual({ other: 1 });
-    expect(() => unparsedOutput(new Error('429'))).toThrow('429');
-    const { answer, trace } = await run(chatAnswering(unparsedOutput(rejected), { answer: 'ok' }));
+  it('takes the tool call or the JSON in the text when the provider parser yields nothing', () => {
+    const call = new AIMessage({
+      content: '',
+      tool_calls: [{ id: '1', name: 'other', args: { answer: 'x' } }],
+    });
+    expect(finalOutputOf({ raw: call, parsed: null }).value).toEqual({ answer: 'x' });
+    const text = new AIMessage({
+      content: 'Here it is: {"answer": "y"}',
+      response_metadata: { finish_reason: 'stop' },
+    });
+    expect(finalOutputOf({ raw: text, parsed: null }).value).toEqual({ answer: 'y' });
+    const empty = finalOutputOf({
+      raw: new AIMessage({ content: 'thinking...', response_metadata: { finish_reason: 'length' } }),
+      parsed: null,
+    });
+    expect(empty.value).toBeUndefined();
+    expect(empty.note).toMatch(/stop reason length, text: "thinking\.\.\."/);
+  });
+
+  it('names the exact schema problem for a correction round (e.g. an omitted field)', async () => {
+    const { answer, trace } = await run(chatAnswering({ answer: 7 }, { answer: 'ok' }));
     expect(answer).toEqual({ answer: 'ok' });
-    expect(trace.at(-1)?.content).toMatch(/does not match the schema: answer: Invalid input/);
+    expect(trace.at(-1)?.content).toMatch(/does not match the schema: answer: Invalid input.*\(you sent 7\)/);
   });
 
   it('fails the run with a clear error when no valid answer comes', async () => {

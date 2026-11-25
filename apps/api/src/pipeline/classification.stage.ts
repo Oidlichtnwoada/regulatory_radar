@@ -94,7 +94,9 @@ it must act, so it is relevant for every sector whose typical or most exposed fi
 large companies: energy-intensive manufacturing; a duty for shops above a floor space: retail trade). The same holds
 for rules that apply only in a crisis or at a member state's option ("may oblige large gas consumers to cut demand"):
 relevant for the sectors they target. Voluntary schemes that firms may join (joint purchasing, stockpiling, pledges,
-platforms) without duties, costs or aid are borderline for their users.
+platforms) without duties, costs or aid are borderline for their users. Criteria that only classify an activity
+without duties (sustainable-finance taxonomy screening criteria, eco-label criteria) are borderline for the activities
+they classify: they change financing and labelling conditions, not what the firms must do.
 Main targets versus marginal coverage, judged per division (two-digit code): when a measure designed for some
 industries also reaches a few classes of another division through a handful of large installations or narrow product
 lines, those classes are borderline, not relevant (e.g. the few food plants covered by emissions-trading benchmarks).
@@ -111,15 +113,19 @@ How to work:
    the stated tags of the channels (always kept) and how similar procedures were labelled (precedents).
 2. Follow the value chain: who carries the obligation or cost - producers, processors, importers, wholesalers,
    retailers, users, service providers? Label each affected link (e.g. a carbon border levy on steel imports hits
-   importers and downstream metal users, not only steel producers; packaging rules hit packers and retailers).
+   importers and downstream metal users, not only steel producers). Rules on how packaging is used (reuse targets,
+   pooling, take-back) hit those who fill, ship or use it (packers, wholesalers, retailers); packaging manufacturers
+   are relevant only when the rule sets requirements on how packaging is made (design, material, recycled content),
+   otherwise a change in demand for their products makes them borderline at most.
    Typical chains: rules on what a shop offers, takes back, displays or pays out at the point of sale (credit or
    payment at the checkout, cash services, deposit refunds, price and fee information, unsold stock) are relevant for
    retail trade even when the main addressee is a bank, payment provider or producer; rules on waste and secondary raw
    materials (scrap, recycled material) hit the waste operators and the industries that buy, ship or melt them (steel
    mills and foundries): when such a rule puts records, notifications or permits on whoever ships or receives the
    material, the sectors that regularly do so must act themselves, so they are relevant, not borderline; energy and carbon-cost rules for "energy-intensive" industries or "large industrial
-   consumers" hit the energy-intensive industries (basic metals, chemicals, cement, lime, glass, ceramics, pulp and
-   paper, refining), not every manufacturer. Product rules often exclude whole product groups (food, feed, medicines,
+   consumers" hit the energy-intensive industries - pulp and paper (C17), refining (C19), chemicals (C20), cement,
+   lime, glass and ceramics (C23) and basic metals (C24) - not other manufacturing divisions; another division counts
+   only when the item or a source about this same procedure names it. Product rules often exclude whole product groups (food, feed, medicines,
    vehicles, ...): check the scope and exclusions of the act before labelling the producers of a product group.
 3. Find codes with search_nace (any wording: products, activities, business types) and confirm each code with
    nace_notes (includes / excludes). Use the most specific codes that fit, several when needed, and * only for rules

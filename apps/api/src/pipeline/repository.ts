@@ -122,18 +122,18 @@ export const MAX_ATTEMPTS = 3;
 
 /**
  * SQL condition: an item with `failures` failed attempts, the last at `lastFailure`, may be tried (again).
- * The wait after the n-th failure is retryAfterSeconds x 4^(n-1), so a provider outage does not use up
+ * The wait after the n-th failure is retryAfterSeconds x 5^(n-1), so a provider outage does not use up
  * the attempts within a few cycles. Evaluated in the database, so only its clock counts.
  */
 const retryDue = (failures: Prisma.Sql, lastFailure: Prisma.Sql, retryAfterSeconds: number): Prisma.Sql =>
   Prisma.sql`(${failures} = 0 OR (${failures} < ${MAX_ATTEMPTS}
-    AND ${lastFailure} <= now() - make_interval(secs => ${retryAfterSeconds}::float8 * power(4, ${failures} - 1))))`;
+    AND ${lastFailure} <= now() - make_interval(secs => ${retryAfterSeconds}::float8 * power(5, ${failures} - 1))))`;
 
 /** Which findings a stage picks up. */
 export interface PendingOptions {
   /** Maximum number of findings. */
   readonly limit: number;
-  /** Wait before the first retry; every further retry waits four times longer. */
+  /** Wait before the first retry; every further retry waits five times longer. */
   readonly retryAfterSeconds: number;
   /** Translation engine to wait for (embedding only): it must have a result or have given up. */
   readonly afterTranslation?: string;

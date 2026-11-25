@@ -1,7 +1,7 @@
 # Online evaluation: OpenAI
 
 The LLM pipeline (online mode) scored against both label sets, with OpenAI as the single provider. Raw output of
-the latest complete run: [`online.json`](online.json). The offline (deterministic) results are in the
+the latest complete run: [`online-openai.json`](online-openai.json). The offline (deterministic) results are in the
 [README](../../README.md#evaluation).
 
 ## Setup
@@ -77,7 +77,7 @@ What the runs showed:
 - One complete online run makes roughly 50 translation calls, about 1,100 embedding inputs (items and NACE codes),
   about 50 grouping agent runs and 90 to 135 classification agent runs, each up to 12 model turns.
 - Provider errors never stop the services: a failed agent run stores the deterministic fallback and is retried with
-  backoff (5 min, ×4, at most 3 attempts), and every stage logs one warning per cycle with the count and the first
+  backoff (1 min, then 5 min, at most 3 attempts), and every stage logs one warning per cycle with the count and the first
   error (for example `429 You have no credits remaining`).
 
 ## Reproduce
