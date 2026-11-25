@@ -215,10 +215,26 @@
   </table></div>
 </section>
 
+<section class="roomy slide">
+  <p class="kicker">Agentic practice</p>
+  <h2>My working style: fix the end state, let the agent loop</h2>
+  <div class="flow">
+    <div class="step">1 Freedom<br><span class="muted">many tools, few limits</span></div><span class="arrow">→</span>
+    <div class="step">2 Fix the end state<br><span class="muted">e.g. 100 % on the eval set</span></div><span class="arrow">→</span>
+    <div class="step">3 Agent loops<br><span class="muted">change, test, eval</span></div><span class="arrow">→</span>
+    <div class="step">4 Stop<br><span class="muted">target reached, or the code gets too complex</span></div>
+  </div>
+    <div class="grid">
+    <div class="card"><h3>Freedom</h3>All tools the agent needs: shell, Docker, database, tests, the eval, the provider APIs.</div>
+    <div class="card"><h3>End state</h3>A measurable target instead of step-by-step instructions, e.g. 100 % tier agreement on the extended eval set.</div>
+    <div class="card"><h3>Stop rule</h3>I end the loop when the target is reached, or earlier when the code gets too complex for the gain.</div>
+  </div>
+</section>
+
 <section class="slide">
   <p class="kicker">Agentic practice</p>
   <h2>How I worked with the agent</h2>
-  <div class="grid">
+<div class="grid">
     <div class="card"><h3>Setup</h3><code>AGENTS.md</code> rules (spec first, append-only DB, Rev. 2.1 only, functional, 100 % docs), precommit gate, subagents for the UI and blind labelling.</div>
     <div class="card"><h3>My steering</h3>NACE Rev. 2.1. Two databases. OpenAI Responses API. Majority consensus. General rules only. Dry runs before full runs.</div>
     <div class="card"><h3>Verification</h3>Real stack, testcontainers, Playwright on desktop and phone, live-source smoke run, eval after every change.</div>
