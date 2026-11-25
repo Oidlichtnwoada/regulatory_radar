@@ -2,6 +2,20 @@
 
 A self-hosted radar for chambers and associations. It streams EU and national regulatory items, collapses them into one entry per procedure, decides relevance per EU country × NACE Rev. 2.1 code and ranks the result by actionability. The brief is in [docs/CHALLENGE.md](docs/CHALLENGE.md).
 
+## Deliverables
+
+| Deliverable                        | Where                                                                                                               |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Code, `Dockerfile`, compose file   | [apps/](apps/), [Dockerfile](Dockerfile), [docker-compose.yml](docker-compose.yml)                                  |
+| Eval numbers                       | [Evaluation](#evaluation) below, raw output in [docs/eval/](docs/eval/)                                             |
+| Code review (Part B)               | [code-review/REVIEW.md](code-review/REVIEW.md), fix in [code-review/snippet_fixed.py](code-review/snippet_fixed.py) |
+| Agent setup                        | [AGENTS.md](AGENTS.md)                                                                                              |
+| Transcript notes and key prompts   | [docs/agent-log.md](docs/agent-log.md)                                                                              |
+| Decision log                       | [Decision log](#decision-log) below                                                                                 |
+| Third-party components and sources | [THIRD_PARTY.md](THIRD_PARTY.md)                                                                                    |
+| Self report (hours)                | [Self report](#self-report) below                                                                                   |
+| Presentation                       | [docs/presentation.html](docs/presentation.html)                                                                    |
+
 ## Run it (under 5 minutes)
 
 ```bash
@@ -137,10 +151,6 @@ Key prompts and where I steered: [docs/agent-log.md](docs/agent-log.md).
 ## Self report
 
 Time invested: **8 hours**, with Claude Code as the coding agent.
-
-## Repository guide
-
-[AGENTS.md](AGENTS.md) (agent rules) · [docs/agent-log.md](docs/agent-log.md) · [docs/presentation.html](docs/presentation.html) · [code-review/REVIEW.md](code-review/REVIEW.md) (Part B) · [THIRD_PARTY.md](THIRD_PARTY.md)
 
 ## Licence
 
